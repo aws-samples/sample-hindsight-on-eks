@@ -1,0 +1,8 @@
+terraform.tfvars
+.terraform/
+*.tfstate
+*.tfstate.*
+tfplan
+*.tfplan
+state-backup-v1-personal/
+.build/

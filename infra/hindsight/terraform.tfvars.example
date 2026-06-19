@@ -1,0 +1,45 @@
+# Copy this file to terraform.tfvars and fill in your values.
+# `terraform.tfvars` is in .gitignore — never commit it.
+
+# ============================================================
+# SELF-CONTAINED DEPLOYMENT (default) — the minimal setup.
+# Terraform creates a sample Cognito pool; no public domain needed.
+# Access the deployment via `kubectl port-forward` after apply.
+# ============================================================
+
+aws_region  = "us-east-1"                  # AWS region for all resources
+aws_profile = "default"                    # AWS CLI profile (admin-level for first apply)
+db_password = "CHANGE_ME_STRONG_PASSWORD"  # openssl rand -base64 24
+
+# bedrock_model_id defaults to openai.gpt-oss-120b-1:0 (auto-enabled on first use).
+
+# ============================================================
+# OPTIONAL: PUBLIC ENDPOINT
+# Uncomment to expose Hindsight publicly with TLS. Requires a Route 53
+# hosted zone you own.
+# ============================================================
+# public_endpoint  = true
+# hosted_zone_id   = "Z0123456789ABCDEF"        # aws route53 list-hosted-zones
+# hindsight_domain = "hindsight.example.com"
+
+# ============================================================
+# OPTIONAL: BRING YOUR OWN COGNITO POOL
+# Uncomment to use an existing pool instead of a Terraform-created one.
+# ============================================================
+# create_identity_provider = false
+# cognito_user_pool_id     = "us-east-1_xxxxxxxxx"
+# cognito_domain_prefix    = "my-hindsight-pool"
+# cognito_idp_name         = ""   # set if your pool federates to a SAML/OIDC IdP
+
+# ============================================================
+# OPTIONAL: FEDERATION ON THE TERRAFORM-CREATED POOL
+# Attach your corporate IdP to the sample pool (create_identity_provider must be true).
+# See docs/federation.md.
+# ============================================================
+# federation = {
+#   type          = "OIDC"
+#   provider_name = "MyCorpIdP"
+#   oidc_issuer        = "https://idp.example.com"
+#   oidc_client_id     = "..."
+#   oidc_client_secret = "..."
+# }

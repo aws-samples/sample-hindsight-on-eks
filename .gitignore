@@ -1,0 +1,21 @@
+.terraform/
+*.tfstate
+*.tfstate.*
+terraform.tfvars
+tfplan
+*.tfplan
+crash.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+.terraformrc
+terraform.rc
+
+.remember/
+
+# Local-only working files
+local/
+
+# macOS
+.DS_Store

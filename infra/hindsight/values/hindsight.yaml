@@ -1,0 +1,125 @@
+# Hindsight Helm values for EKS Fargate deployment
+# Secrets are managed via existingSecret (Terraform kubernetes_secret)
+# LLM uses native Bedrock provider; Embeddings/Reranker use LiteLLM proxy (Bedrock via IRSA)
+
+api:
+  replicaCount: 1
+  image:
+    repository: ghcr.io/vectorize-io/hindsight-api
+    tag: "latest-slim"
+  resources:
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+    requests:
+      cpu: 250m
+      memory: 512Mi
+  persistence:
+    modelCache:
+      enabled: false  # Slim image has no local models
+  env:
+    # LLM - native Bedrock support (auth via IRSA, no API key)
+    HINDSIGHT_API_LLM_PROVIDER: "bedrock"
+    # Model ID is set dynamically via Terraform
+    # Embeddings - via LiteLLM proxy (proxy handles Bedrock SigV4 auth via IRSA)
+    HINDSIGHT_API_EMBEDDINGS_PROVIDER: "litellm"
+    HINDSIGHT_API_EMBEDDINGS_LITELLM_API_BASE: "http://litellm-proxy:4000"
+    HINDSIGHT_API_EMBEDDINGS_LITELLM_MODEL: "bedrock-embed"
+    # Reranker - via LiteLLM proxy (proxy handles Bedrock SigV4 auth via IRSA)
+    HINDSIGHT_API_RERANKER_PROVIDER: "litellm"
+    HINDSIGHT_API_RERANKER_LITELLM_API_BASE: "http://litellm-proxy:4000"
+    HINDSIGHT_API_RERANKER_LITELLM_MODEL: "bedrock-rerank"
+    # File storage
+    HINDSIGHT_API_FILE_STORAGE_TYPE: "s3"
+  # Give the app generous time to start (litellm proxy + Bedrock init can be slow on Fargate)
+  livenessProbe:
+    httpGet:
+      path: /health
+      port: 8888
+    initialDelaySeconds: 120
+    periodSeconds: 15
+    failureThreshold: 5
+    timeoutSeconds: 5
+  readinessProbe:
+    httpGet:
+      path: /health
+      port: 8888
+    initialDelaySeconds: 30
+    periodSeconds: 10
+    failureThreshold: 10
+    timeoutSeconds: 5
+
+worker:
+  enabled: true
+  replicaCount: 1
+  image:
+    repository: ghcr.io/vectorize-io/hindsight-api
+    tag: "latest-slim"
+  resources:
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+    requests:
+      cpu: 250m
+      memory: 512Mi
+  persistence:
+    modelCache:
+      enabled: false
+  # Override HINDSIGHT_API_PORT to prevent K8s service discovery collision
+  # (K8s injects HINDSIGHT_API_PORT=tcp://... from the hindsight-api service)
+  env:
+    HINDSIGHT_API_PORT: "8889"
+  livenessProbe:
+    httpGet:
+      path: /health
+      port: 8889
+    initialDelaySeconds: 120
+    periodSeconds: 15
+    failureThreshold: 5
+    timeoutSeconds: 5
+  readinessProbe:
+    httpGet:
+      path: /health
+      port: 8889
+    initialDelaySeconds: 30
+    periodSeconds: 10
+    failureThreshold: 10
+    timeoutSeconds: 5
+
+controlPlane:
+  enabled: true
+  replicaCount: 1
+  resources:
+    limits:
+      cpu: 500m
+      memory: 512Mi
+    requests:
+      cpu: 100m
+      memory: 256Mi
+
+postgresql:
+  enabled: false
+  external:
+    host: "PLACEHOLDER"  # Set dynamically by Terraform
+    port: 5432
+    database: "hindsight"
+    username: "hindsight"
+
+ingress:
+  enabled: true
+  className: "alb"
+  annotations:
+    alb.ingress.kubernetes.io/target-type: "ip"
+    alb.ingress.kubernetes.io/healthcheck-path: "/health"
+    alb.ingress.kubernetes.io/group.order: "10"
+  hosts:
+    - host: ""
+      paths:
+        - path: /
+          pathType: Prefix
+          service: api
+
+serviceAccount:
+  create: true
+  annotations: {}
+  # IRSA annotation set dynamically by Terraform

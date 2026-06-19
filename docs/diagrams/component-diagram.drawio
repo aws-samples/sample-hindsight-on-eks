@@ -1,0 +1,234 @@
+<mxfile host="Electron">
+  <diagram name="Page-1" id="SayjkWNpsl7B0pyANfbF">
+    <mxGraphModel dx="1230" dy="793" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1100" pageHeight="600" math="0" shadow="0" adaptiveColors="auto">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="client" parent="1" style="swimlane;startSize=24;html=1;fontStyle=1;container=0;rounded=0;labelBackgroundColor=none;sketch=1;curveFitting=1;jiggle=2;" value="Client" vertex="1">
+          <mxGeometry height="220" width="170" x="22" y="30" as="geometry" />
+        </mxCell>
+        <mxCell id="opencode" parent="client" style="rounded=0;whiteSpace=wrap;html=1;labelBackgroundColor=none;sketch=1;curveFitting=1;jiggle=2;" value="OpenCode /&#xa;Claude Code" vertex="1">
+          <mxGeometry height="55" width="140" x="15" y="50" as="geometry" />
+        </mxCell>
+        <mxCell id="j9zCaUU5265FuVL98uc--2" parent="client" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;labelBackgroundColor=none;sketch=1;curveFitting=1;jiggle=2;" value="hindsight-auth.sh" vertex="1">
+          <mxGeometry height="55" width="140" x="15" y="130" as="geometry" />
+        </mxCell>
+        <mxCell id="edge" parent="1" style="swimlane;startSize=24;html=1;fontStyle=1;container=0;rounded=0;labelBackgroundColor=none;sketch=1;curveFitting=1;jiggle=2;" value="Ingress &amp; identity" vertex="1">
+          <mxGeometry height="260" width="180" x="244" y="30" as="geometry" />
+        </mxCell>
+        <mxCell id="alb" parent="edge" style="rounded=0;whiteSpace=wrap;html=1;labelBackgroundColor=none;sketch=1;curveFitting=1;jiggle=2;" value="ALB&#xa;HTTPS :443" vertex="1">
+          <mxGeometry height="60" width="140" x="20" y="47.5" as="geometry" />
+        </mxCell>
+        <mxCell id="eks" parent="1" style="swimlane;startSize=24;html=1;fontStyle=1;movable=1;resizable=1;rotatable=1;deletable=1;editable=1;locked=0;connectable=1;container=0;rounded=0;labelBackgroundColor=none;sketch=1;curveFitting=1;jiggle=2;" value="EKS Fargate (namespace: hindsight)" vertex="1">
+          <mxGeometry height="330" width="380" x="500" y="30" as="geometry" />
+        </mxCell>
+        <mxCell id="storage" parent="1" style="swimlane;startSize=24;html=1;fontStyle=1;rounded=0;container=0;labelBackgroundColor=none;sketch=1;curveFitting=1;jiggle=2;" value="Storage" vertex="1">
+          <mxGeometry height="260" width="190" x="500" y="380" as="geometry">
+            <mxRectangle height="30" width="80" x="500" y="380" as="alternateBounds" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="j9zCaUU5265FuVL98uc--7" parent="storage" style="shape=cylinder3;whiteSpace=wrap;html=1;fillColor=none;boundedLbl=1;rounded=0;labelBackgroundColor=none;sketch=1;curveFitting=1;jiggle=2;" value="Secrets&#xa;Manager" vertex="1">
+          <mxGeometry height="65" width="140" x="25" y="175" as="geometry" />
+        </mxCell>
+        <mxCell id="bedrock" parent="1" style="swimlane;startSize=24;html=1;fontStyle=1;rounded=0;container=0;labelBackgroundColor=none;sketch=1;curveFitting=1;jiggle=2;" value="AWS Bedrock" vertex="1">
+          <mxGeometry height="270" width="190" x="917" y="30" as="geometry">
+            <mxRectangle height="30" width="110" x="917" y="100" as="alternateBounds" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="llm" parent="bedrock" style="rounded=0;whiteSpace=wrap;html=1;labelBackgroundColor=none;sketch=1;curveFitting=1;jiggle=2;" value="LLM" vertex="1">
+          <mxGeometry height="45" width="140" x="25" y="50" as="geometry" />
+        </mxCell>
+        <mxCell id="embed" parent="bedrock" style="rounded=0;whiteSpace=wrap;html=1;labelBackgroundColor=none;sketch=1;curveFitting=1;jiggle=2;" value="Embeddings" vertex="1">
+          <mxGeometry height="45" width="140" x="25" y="120" as="geometry" />
+        </mxCell>
+        <mxCell id="rerank" parent="bedrock" style="rounded=0;whiteSpace=wrap;html=1;labelBackgroundColor=none;sketch=1;curveFitting=1;jiggle=2;" value="Reranker" vertex="1">
+          <mxGeometry height="45" width="140" x="25" y="195" as="geometry" />
+        </mxCell>
+        <mxCell id="e1" edge="1" parent="1" source="opencode" style="rounded=0;html=1;fontSize=10;entryX=0;entryY=0.5;entryDx=0;entryDy=0;labelBackgroundColor=none;fontColor=default;sketch=1;curveFitting=1;jiggle=2;" target="alb" value="&lt;span style=&quot;background-color: light-dark(#ffffff, var(--ge-dark-color, #121212));&quot;&gt;HTTPS&amp;nbsp;&lt;/span&gt;&lt;div&gt;&lt;span style=&quot;background-color: light-dark(#ffffff, var(--ge-dark-color, #121212));&quot;&gt;+ JWT&lt;/span&gt;&lt;/div&gt;">
+          <mxGeometry relative="1" x="0.0795" y="-2" as="geometry">
+            <mxPoint as="offset" />
+            <mxPoint x="264" y="220" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e2" edge="1" parent="1" source="alb" style="rounded=0;html=1;edgeStyle=orthogonalEdgeStyle;entryX=0.25;entryY=0;entryDx=0;entryDy=0;exitX=0.706;exitY=0.99;exitDx=0;exitDy=0;exitPerimeter=0;labelBackgroundColor=none;fontColor=default;sketch=1;curveFitting=1;jiggle=2;" target="api" value="">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="363" y="159" />
+              <mxPoint x="570" y="159" />
+            </Array>
+            <mxPoint x="385" y="140" as="sourcePoint" />
+            <mxPoint x="570" y="177.5" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e3" edge="1" parent="1" source="alb" style="rounded=0;html=1;fontSize=10;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;labelBackgroundColor=none;fontColor=default;sketch=1;curveFitting=1;jiggle=2;" target="cp" value="&lt;span style=&quot;background-color: light-dark(#ffffff, var(--ge-dark-color, #121212));&quot;&gt;OIDC auth&lt;/span&gt;">
+          <mxGeometry relative="1" x="-0.1238" as="geometry">
+            <mxPoint as="offset" />
+            <mxPoint x="420" y="185.0000000000001" as="sourcePoint" />
+            <mxPoint x="535" y="115.00000000000011" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e4" edge="1" parent="1" source="cognito" style="rounded=0;html=1;fontSize=10;labelBackgroundColor=none;fontColor=default;sketch=1;curveFitting=1;jiggle=2;" target="alb" value="&lt;span style=&quot;background-color: light-dark(#ffffff, var(--ge-dark-color, #121212));&quot;&gt;OIDC&lt;/span&gt;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e5" edge="1" parent="1" source="cognito" style="rounded=0;html=1;fontSize=10;edgeStyle=orthogonalEdgeStyle;curved=0;exitX=0.714;exitY=0.004;exitDx=0;exitDy=0;exitPerimeter=0;labelBackgroundColor=none;fontColor=default;sketch=1;curveFitting=1;jiggle=2;" value="&lt;span style=&quot;background-color: light-dark(#ffffff, var(--ge-dark-color, #121212));&quot;&gt;JWKS&lt;/span&gt;">
+          <mxGeometry relative="1" x="0.2538" as="geometry">
+            <mxPoint as="offset" />
+            <Array as="points">
+              <mxPoint x="364" y="190" />
+            </Array>
+            <mxPoint x="400" y="230" as="sourcePoint" />
+            <mxPoint x="535" y="190.0000000000001" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e6" edge="1" parent="1" source="api" style="rounded=0;html=1;edgeStyle=orthogonalEdgeStyle;curved=0;labelBackgroundColor=none;fontColor=default;sketch=1;curveFitting=1;jiggle=2;" target="aurora" value="">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="570" y="240" />
+              <mxPoint x="460" y="240" />
+              <mxPoint x="460" y="520" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e7" edge="1" parent="1" source="api" style="rounded=0;html=1;edgeStyle=orthogonalEdgeStyle;curved=0;labelBackgroundColor=none;fontColor=default;sketch=1;curveFitting=1;jiggle=2;" target="s3" value="">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="605" y="260" />
+              <mxPoint x="480" y="260" />
+              <mxPoint x="480" y="448" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e8" edge="1" parent="1" source="api" style="rounded=0;html=1;edgeStyle=orthogonalEdgeStyle;curved=0;exitX=0.75;exitY=0;exitDx=0;exitDy=0;labelBackgroundColor=none;fontColor=default;sketch=1;curveFitting=1;jiggle=2;" target="llm" value="">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="640" y="160" />
+              <mxPoint x="760" y="160" />
+              <mxPoint x="760" y="102" />
+            </Array>
+            <mxPoint x="605" y="183.5" as="sourcePoint" />
+            <mxPoint x="965" y="170" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e9" edge="1" parent="1" source="api" style="rounded=0;html=1;edgeStyle=orthogonalEdgeStyle;curved=0;labelBackgroundColor=none;fontColor=default;sketch=1;curveFitting=1;jiggle=2;" target="litellm" value="">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="760" y="200" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e10" edge="1" parent="1" source="worker" style="rounded=0;html=1;edgeStyle=orthogonalEdgeStyle;curved=0;labelBackgroundColor=none;fontColor=default;sketch=1;curveFitting=1;jiggle=2;" target="aurora" value="">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="720" y="320" />
+              <mxPoint x="720" y="510" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e11" edge="1" parent="1" source="worker" style="rounded=0;html=1;edgeStyle=orthogonalEdgeStyle;curved=0;labelBackgroundColor=none;fontColor=default;sketch=1;curveFitting=1;jiggle=2;" target="litellm" value="">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="760" y="308" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e12" edge="1" parent="1" source="litellm" style="rounded=0;html=1;edgeStyle=orthogonalEdgeStyle;curved=0;labelBackgroundColor=none;fontColor=default;sketch=1;curveFitting=1;jiggle=2;" target="embed" value="">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="790" y="172" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e13" edge="1" parent="1" source="litellm" style="rounded=0;html=1;edgeStyle=orthogonalEdgeStyle;curved=0;labelBackgroundColor=none;fontColor=default;sketch=1;curveFitting=1;jiggle=2;" target="rerank" value="">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="920" y="253" />
+              <mxPoint x="920" y="253" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="cp" parent="1" style="rounded=0;whiteSpace=wrap;html=1;labelBackgroundColor=none;sketch=1;curveFitting=1;jiggle=2;" value="control-plane&#xa;:3000" vertex="1">
+          <mxGeometry height="55" width="140" x="535" y="80" as="geometry" />
+        </mxCell>
+        <mxCell id="api" parent="1" style="rounded=0;whiteSpace=wrap;html=1;labelBackgroundColor=none;sketch=1;curveFitting=1;jiggle=2;" value="hindsight-api&#xa;:8888" vertex="1">
+          <mxGeometry height="55" width="140" x="535" y="175.5" as="geometry" />
+        </mxCell>
+        <mxCell id="worker" parent="1" style="rounded=0;whiteSpace=wrap;html=1;labelBackgroundColor=none;sketch=1;curveFitting=1;jiggle=2;" value="hindsight-worker&#xa;:8889" vertex="1">
+          <mxGeometry height="55" width="140" x="535" y="280" as="geometry" />
+        </mxCell>
+        <mxCell id="litellm" parent="1" style="rounded=0;whiteSpace=wrap;html=1;labelBackgroundColor=none;sketch=1;curveFitting=1;jiggle=2;" value="litellm-proxy&#xa;:4000" vertex="1">
+          <mxGeometry height="55" width="140" x="720" y="225" as="geometry" />
+        </mxCell>
+        <mxCell id="cognito" parent="1" style="rounded=0;whiteSpace=wrap;html=1;labelBackgroundColor=none;sketch=1;curveFitting=1;jiggle=2;" value="Cognito&#xa;User Pool" vertex="1">
+          <mxGeometry height="60" width="140" x="264" y="209" as="geometry" />
+        </mxCell>
+        <mxCell id="s3" parent="1" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;rounded=0;labelBackgroundColor=none;sketch=1;curveFitting=1;jiggle=2;" value="S3 bucket" vertex="1">
+          <mxGeometry height="55" width="140" x="525" y="420" as="geometry" />
+        </mxCell>
+        <mxCell id="aurora" parent="1" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;rounded=0;labelBackgroundColor=none;sketch=1;curveFitting=1;jiggle=2;" value="Aurora Serverless v2&#xa;pgvector" vertex="1">
+          <mxGeometry height="60" width="140" x="525" y="485" as="geometry" />
+        </mxCell>
+        <mxCell id="j9zCaUU5265FuVL98uc--4" parent="1" style="swimlane;startSize=24;html=1;fontStyle=1;container=0;rounded=0;labelBackgroundColor=none;sketch=1;curveFitting=1;jiggle=2;" value="Key issuance (on demand)" vertex="1">
+          <mxGeometry height="130" width="370" x="24" y="510" as="geometry" />
+        </mxCell>
+        <mxCell id="j9zCaUU5265FuVL98uc--5" parent="j9zCaUU5265FuVL98uc--4" style="rounded=0;whiteSpace=wrap;html=1;labelBackgroundColor=none;sketch=1;curveFitting=1;jiggle=2;" value="Get-Key Lambda" vertex="1">
+          <mxGeometry height="50" width="140" x="210" y="60" as="geometry" />
+        </mxCell>
+        <mxCell id="j9zCaUU5265FuVL98uc--15" parent="j9zCaUU5265FuVL98uc--4" style="rounded=0;whiteSpace=wrap;html=1;labelBackgroundColor=none;sketch=1;curveFitting=1;jiggle=2;" value="API Gateway&#xa;auth.&lt;domain&gt;" vertex="1">
+          <mxGeometry height="55" width="140" x="30" y="57.5" as="geometry" />
+        </mxCell>
+        <mxCell id="j9zCaUU5265FuVL98uc--10" edge="1" parent="j9zCaUU5265FuVL98uc--4" source="j9zCaUU5265FuVL98uc--15" style="rounded=0;html=1;labelBackgroundColor=none;fontColor=default;sketch=1;curveFitting=1;jiggle=2;" target="j9zCaUU5265FuVL98uc--5" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="j9zCaUU5265FuVL98uc--6" parent="1" style="swimlane;startSize=24;html=1;fontStyle=1;container=0;rounded=0;labelBackgroundColor=none;sketch=1;curveFitting=1;jiggle=2;" value="Daily rotation (cron 05:00 UTC)" vertex="1">
+          <mxGeometry height="120" width="184" x="240" y="330" as="geometry" />
+        </mxCell>
+        <mxCell id="j9zCaUU5265FuVL98uc--9" edge="1" parent="1" source="j9zCaUU5265FuVL98uc--2" style="rounded=0;html=1;fontSize=10;exitX=0.5;exitY=1;exitDx=0;exitDy=0;labelBackgroundColor=none;fontColor=default;sketch=1;curveFitting=1;jiggle=2;" value="&lt;span style=&quot;background-color: light-dark(#ffffff, var(--ge-dark-color, #121212));&quot;&gt;GET /my-key&lt;/span&gt;">
+          <mxGeometry relative="1" x="-0.2727" as="geometry">
+            <mxPoint as="offset" />
+            <mxPoint x="107" y="568" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="j9zCaUU5265FuVL98uc--11" edge="1" parent="1" source="j9zCaUU5265FuVL98uc--5" style="rounded=0;html=1;fontSize=10;edgeStyle=orthogonalEdgeStyle;curved=0;labelBackgroundColor=none;fontColor=default;sketch=1;curveFitting=1;jiggle=2;" target="j9zCaUU5265FuVL98uc--7" value="&lt;span style=&quot;background-color: light-dark(#ffffff, var(--ge-dark-color, #121212));&quot;&gt;read key&lt;/span&gt;">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="450" y="600" />
+              <mxPoint x="450" y="600" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="j9zCaUU5265FuVL98uc--12" edge="1" parent="1" source="j9zCaUU5265FuVL98uc--16" style="rounded=0;html=1;fontSize=10;edgeStyle=orthogonalEdgeStyle;entryX=0;entryY=0.5;entryDx=0;entryDy=0;labelBackgroundColor=none;fontColor=default;sketch=1;curveFitting=1;jiggle=2;" target="cognito" value="&lt;span style=&quot;background-color: light-dark(#ffffff, var(--ge-dark-color, #121212));&quot;&gt;list users&lt;/span&gt;">
+          <mxGeometry relative="1" x="0.0744" y="10" as="geometry">
+            <mxPoint as="offset" />
+            <Array as="points">
+              <mxPoint x="220" y="402" />
+              <mxPoint x="220" y="239" />
+            </Array>
+            <mxPoint x="-100" y="790" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="j9zCaUU5265FuVL98uc--13" edge="1" parent="1" source="j9zCaUU5265FuVL98uc--16" style="rounded=0;html=1;fontSize=10;edgeStyle=orthogonalEdgeStyle;curved=0;labelBackgroundColor=none;fontColor=default;sketch=1;curveFitting=1;jiggle=2;" target="j9zCaUU5265FuVL98uc--7" value="&lt;span style=&quot;background-color: light-dark(#ffffff, var(--ge-dark-color, #121212));&quot;&gt;write keys&lt;/span&gt;">
+          <mxGeometry relative="1" x="-0.3139" y="-10" as="geometry">
+            <mxPoint as="offset" />
+            <Array as="points">
+              <mxPoint x="440" y="410" />
+              <mxPoint x="440" y="580" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="j9zCaUU5265FuVL98uc--14" edge="1" parent="1" source="j9zCaUU5265FuVL98uc--16" style="rounded=0;html=1;fontSize=10;edgeStyle=orthogonalEdgeStyle;curved=0;entryX=0;entryY=0.75;entryDx=0;entryDy=0;labelBackgroundColor=none;fontColor=default;sketch=1;curveFitting=1;jiggle=2;" target="api" value="&lt;span style=&quot;background-color: light-dark(#ffffff, var(--ge-dark-color, #121212));&quot;&gt;k8s secret sync + restart&lt;/span&gt;">
+          <mxGeometry relative="1" x="-0.198" y="40" as="geometry">
+            <mxPoint as="offset" />
+            <Array as="points">
+              <mxPoint x="440" y="390" />
+              <mxPoint x="440" y="217" />
+            </Array>
+            <mxPoint x="190" y="818" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="j9zCaUU5265FuVL98uc--16" parent="1" style="rounded=0;whiteSpace=wrap;html=1;labelBackgroundColor=none;sketch=1;curveFitting=1;jiggle=2;" value="Rotate-Keys Lambda" vertex="1">
+          <mxGeometry height="55" width="140" x="261" y="375" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
