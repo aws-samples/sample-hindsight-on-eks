@@ -55,4 +55,7 @@ locals {
     Project   = var.project_name
     ManagedBy = "terraform"
   }
+
+  # true when provisioning the cluster on EKS Auto Mode rather than Fargate.
+  auto_mode = var.compute_mode == "auto"
 }
