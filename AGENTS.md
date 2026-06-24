@@ -2,11 +2,11 @@
 
 ## Project
 
-Self-hosted [Hindsight](https://github.com/vectorize-io/hindsight) (persistent AI agent memory via MCP) on AWS EKS Fargate. Infrastructure-only repo — no application code, no tests, no CI.
+Self-hosted [Hindsight](https://github.com/vectorize-io/hindsight) (persistent AI agent memory via MCP) on AWS EKS — Fargate by default, EKS Auto Mode optional. Infrastructure-only repo — no application code, no tests, no CI.
 
 ## Stack
 
-Terraform → EKS Fargate → Aurora Serverless v2 (PostgreSQL 16.4 + pgvector) + S3 + Bedrock (via LiteLLM proxy) + Cognito (auth) + ALB + Route 53
+Terraform → EKS (Fargate or Auto Mode) → Aurora Serverless v2 (PostgreSQL 16.4 + pgvector) + S3 + Bedrock (via LiteLLM proxy) + Cognito (auth) + ALB + Route 53
 
 ## Layout
 
@@ -61,6 +61,9 @@ kubectl port-forward -n hindsight svc/hindsight-control-plane 3000:3000
 - **`.terraform.lock.hcl` is gitignored** — intentional choice.
 - **hindsight-client SDK** — installed from PyPI via `config/setup-venv.sh` (`hindsight-client>=0.7.2`).
 - **Per-user API keys** — rotated daily at 05:00 UTC by Lambda; both current and previous keys valid (grace period). Keys synced to K8s secret via rotation Lambda's EKS access.
+- **Compute mode is set at creation** — `compute_mode = "fargate"` (default) or `"auto"` (EKS Auto Mode). Switching in place is unsupported: disabling Auto Mode requires an explicit `enabled = false` apply before the block can be removed, so changing modes on a live cluster effectively means recreating it.
+- **Self-managed LB controller is kept in Auto Mode** — Auto Mode's built-in load balancer controller cannot do ALB OIDC auth (which gates the dashboard), so the Helm `aws-load-balancer-controller` is deployed in both modes.
+- **IRSA everywhere (not Pod Identity)** — Pod Identity is unsupported on Fargate (hostNetwork DaemonSet), so IRSA is used in both modes to keep AWS access identical across the toggle.
 
 ## Conventions
 

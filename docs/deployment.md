@@ -77,6 +77,28 @@ This writes credentials to `~/.kube/config` (the default location). If you need 
 
 Expected: `hindsight-api`, `hindsight-worker`, `hindsight-control-plane`, and `litellm-proxy` pods all `Running`. Initial scheduling can take 2 minutes per pod on Fargate; if any pod is `Pending` for longer than 5 minutes, `kubectl describe pod -n hindsight <pod>` will show why (commonly: insufficient subnet capacity or wrong subnet tags).
 
+### Deploying on EKS Auto Mode (optional)
+
+By default this sample runs on Fargate, which is the validated path. To use EKS Auto Mode instead, set `compute_mode = "auto"` in `terraform.tfvars` before the first `terraform apply`. The mode is chosen at cluster creation; switching an existing cluster between modes is not supported and requires recreating it.
+
+In Auto Mode the cluster runs AWS-managed EC2 nodes instead of Fargate. After apply, smoke-test the Auto Mode path:
+
+```sh
+# Pods should land on EC2 instances (node names start with "i-"), not "fargate-*".
+kubectl get pods -n hindsight -o wide
+
+# Confirm the managed node pools exist and are Ready.
+kubectl get nodepool
+
+# Confirm the ALB/ingress still came up (the self-managed LB controller runs in both modes).
+kubectl get ingress -n hindsight
+
+# Confirm the dashboard still enforces Cognito OIDC: browsing to cp.<your-domain>
+# should redirect to the Cognito hosted UI before the Control Plane loads.
+```
+
+Auto Mode is less battle-tested in this sample than the Fargate default — treat it as an opt-in and verify the four smoke-test items above before relying on it.
+
 ## Step 5: Port-forward the API and Control Plane
 
 In the self-contained (internal) deployment the ALB is internal-only, so you reach the services through `kubectl port-forward`. Terraform emits ready-to-paste commands:
