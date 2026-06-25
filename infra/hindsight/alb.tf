@@ -114,42 +114,61 @@ resource "null_resource" "alb_drain" {
       export KUBECONFIG="$KUBECONFIG_FILE"
       trap 'rm -f "$KUBECONFIG_FILE"' EXIT
 
+      REGION="${self.triggers.region}"
+      PROFILE="${self.triggers.profile}"
+      NS="${self.triggers.namespace}"
+      ALB_PREFIX="${self.triggers.alb_name_prefix}"
+
       # Build an isolated kubeconfig using the same profile/region as the providers.
       if ! aws eks update-kubeconfig \
         --name "${self.triggers.cluster_name}" \
-        --region "${self.triggers.region}" \
-        --profile "${self.triggers.profile}" >/dev/null 2>&1; then
+        --region "$REGION" \
+        --profile "$PROFILE" >/dev/null 2>&1; then
         echo "alb_drain: cluster unreachable; assuming already destroyed, skipping."
         exit 0
       fi
 
       # Delete every ingress in the namespace (chart-managed API ingress +
-      # Terraform-managed Control Plane ingress). Best-effort; the controller
-      # processes the finalizer and detaches each from the shared ALB.
-      kubectl delete ingress --all -n "${self.triggers.namespace}" \
-        --ignore-not-found --timeout=180s || true
+      # Terraform-managed Control Plane ingress). The AWS Load Balancer Controller
+      # is still running at this point (this resource is destroyed before it), so
+      # it processes the group.ingress.k8s.aws/<group> finalizers, deletes its
+      # TargetGroupBindings, and detaches/deletes the shared ALB. --wait=false so
+      # we don't block on the finalizer here; we poll for completion below.
+      kubectl delete ingress --all -n "$NS" --ignore-not-found --wait=false 2>/dev/null || true
 
-      # Wait until the shared ALB (tagged by the controller with the ingress
-      # group) is gone, so the controller has finished its cleanup before it is
-      # itself removed. Times out after ~5 minutes as a safety valve.
-      for i in $(seq 1 30); do
-        COUNT="$(aws elbv2 describe-load-balancers \
-          --region "${self.triggers.region}" \
-          --profile "${self.triggers.profile}" \
-          --query "length(LoadBalancers[?contains(LoadBalancerName, '${self.triggers.alb_name_prefix}')])" \
+      # Wait for the controller to FINISH: both the Ingress objects AND their
+      # TargetGroupBindings must be gone, and the shared ALB removed. Polling all
+      # three (not just the ALB) is the key correctness fix -- leftover Ingress or
+      # TargetGroupBinding finalizers are exactly what otherwise deadlock the later
+      # destroy of the Control Plane ingress and the hindsight namespace. The
+      # controller normally clears these within a minute or two; we allow ~8.
+      for i in $(seq 1 48); do
+        ING="$(kubectl get ingress -n "$NS" -o name 2>/dev/null | wc -l | tr -d ' ')"
+        TGB="$(kubectl get targetgroupbindings -n "$NS" -o name 2>/dev/null | wc -l | tr -d ' ')"
+        ALB="$(aws elbv2 describe-load-balancers --region "$REGION" --profile "$PROFILE" \
+          --query "length(LoadBalancers[?contains(LoadBalancerName, '$ALB_PREFIX')])" \
           --output text 2>/dev/null || echo ERR)"
-        if [ "$COUNT" = "0" ]; then
-          echo "alb_drain: ALB drained."
+        if [ "$ING" = "0" ] && [ "$TGB" = "0" ] && [ "$ALB" = "0" ]; then
+          echo "alb_drain: controller finished (ingresses, TargetGroupBindings, and ALB all gone)."
           exit 0
         fi
-        if [ "$COUNT" = "ERR" ] || [ "$COUNT" = "None" ]; then
-          echo "alb_drain: ALB query failed (transient?); retrying ($i/30)..."
-        else
-          echo "alb_drain: waiting for ALB to drain ($i/30)..."
-        fi
+        echo "alb_drain: waiting for controller cleanup (ingress=$ING tgb=$TGB alb=$ALB) ($i/48)..."
         sleep 10
       done
-      echo "alb_drain: timed out waiting for ALB; continuing (see troubleshooting)."
+
+      # Fallback safety valve: the controller did not converge in time (e.g. it
+      # stopped reconciling). Clear the lingering finalizers directly so the later
+      # Terraform deletes of the Control Plane ingress and the namespace do not
+      # deadlock. We do NOT remove the controller or its webhooks here -- doing so
+      # blocks ingress mutation and causes phantom TargetGroupBindings; letting the
+      # finalizers go while the controller is still up is the safe action.
+      echo "alb_drain: controller did not converge; clearing lingering finalizers."
+      for ing in $(kubectl get ingress -n "$NS" -o name 2>/dev/null); do
+        kubectl patch "$ing" -n "$NS" --type=merge -p '{"metadata":{"finalizers":[]}}' 2>/dev/null || true
+      done
+      for tgb in $(kubectl get targetgroupbindings -n "$NS" -o name 2>/dev/null); do
+        kubectl patch "$tgb" -n "$NS" --type=merge -p '{"metadata":{"finalizers":[]}}' 2>/dev/null || true
+      done
     EOT
   }
 
