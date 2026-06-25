@@ -31,17 +31,17 @@ module "eks" {
     }
   }
 
-  # EKS Auto Mode compute — only when compute_mode = "auto". Uses both built-in
-  # node pools: "system" (taints nodes for critical add-ons) and "general-purpose"
-  # (workload pods). Both scale from zero, so "system" costs nothing while idle.
+  # EKS Auto Mode compute. Built in main.tf as local.cluster_compute_config:
+  # a populated object in Auto Mode (general-purpose + system node pools, both
+  # scale-from-zero so "system" is free while idle), or an EMPTY map in Fargate
+  # mode so the module omits the compute_config block entirely. EKS requires
+  # computeConfig, kubernetesNetworkConfig, and blockStorage to be ALL enabled or
+  # ALL disabled; the module only renders the network/storage Auto Mode blocks
+  # when compute_config.enabled is true, so passing {enabled=false} here would
+  # render computeConfig alone and fail with "ensure that all required configs
+  # ... are all either fully enabled or fully disabled".
   # NOTE: field is `cluster_compute_config` on the v20 module line (loosely typed).
-  cluster_compute_config = local.auto_mode ? {
-    enabled    = true
-    node_pools = ["general-purpose", "system"]
-    } : {
-    enabled    = false
-    node_pools = []
-  }
+  cluster_compute_config = local.cluster_compute_config
 
   # Required for AWS LB Controller IRSA
   enable_irsa = true
