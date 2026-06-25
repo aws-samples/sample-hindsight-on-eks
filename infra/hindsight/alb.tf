@@ -169,16 +169,19 @@ resource "null_resource" "alb_drain" {
     helm_release.hindsight,
     kubernetes_ingress_v1.control_plane_public,
     kubernetes_ingress_v1.control_plane_internal,
-    # CRITICAL: also depend on the controller's IRSA role/policy. Terraform
-    # destroys a resource before the things it depends on, so this keeps the LB
-    # controller's IAM permissions ALIVE until alb_drain finishes. Without this,
-    # Terraform tears down module.lb_controller_irsa (the IAM policy + role-policy
-    # attachment) at the very start of destroy -- in parallel with alb_drain --
-    # which strips the controller's elasticloadbalancing permissions. The
-    # controller then can't process the ingress finalizers or delete the ALB
-    # (observed as a frozen "ingress=2 tgb=0 alb=1" state), forcing the fallback
-    # finalizer-clear path every time. Keeping IRSA until alb_drain is done lets
-    # the controller do its job and tear the ALB down cleanly on its own.
+    # Keep the controller's IRSA role/policy alive until alb_drain finishes, so the
+    # controller retains its elasticloadbalancing IAM permissions while draining.
     module.lb_controller_irsa,
+    # CRITICAL: keep the VPC (and its NAT gateway) alive until alb_drain finishes.
+    # The controller pods reach the ELB API (elasticloadbalancing.<region>.
+    # amazonaws.com) via the NAT gateway. Terraform destroys a resource before the
+    # things it depends on, and the VPC module's NAT gateway is NOT in this root
+    # module's state, so without this dependency Terraform tears the NAT gateway
+    # down at the start of destroy -- in parallel with alb_drain -- severing the
+    # controller's only egress. The controller then logs
+    # 'Post "https://elasticloadbalancing...": dial tcp ...: i/o timeout' and can
+    # never delete the ALB or process finalizers (the real cause of the teardown
+    # deadlock). Depending on module.vpc keeps NAT/egress up until drain completes.
+    module.vpc,
   ]
 }

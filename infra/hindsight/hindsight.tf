@@ -439,6 +439,14 @@ resource "kubernetes_ingress_v1" "control_plane_public" {
     helm_release.hindsight,
     kubernetes_secret.alb_oidc,
     aws_acm_certificate_validation.hindsight,
+    # Keep the VPC (NAT egress) and the controller's IRSA alive until this ingress
+    # is destroyed. Terraform destroys a resource before its dependencies, so this
+    # ensures the AWS Load Balancer Controller can still reach the ELB API to
+    # process this ingress's group.ingress.k8s.aws/<group> finalizer when Terraform
+    # deletes it. Without these, NAT/IAM can be torn down in parallel, severing the
+    # controller's egress and hanging the delete (see alb_drain in alb.tf).
+    module.vpc,
+    module.lb_controller_irsa,
   ]
 }
 
@@ -479,5 +487,12 @@ resource "kubernetes_ingress_v1" "control_plane_internal" {
     }
   }
 
-  depends_on = [helm_release.hindsight]
+  depends_on = [
+    helm_release.hindsight,
+    # Keep VPC (NAT egress) + controller IRSA alive until this ingress is
+    # destroyed, so the controller can process its finalizer on delete. See the
+    # matching note on control_plane_public and alb_drain in alb.tf.
+    module.vpc,
+    module.lb_controller_irsa,
+  ]
 }
