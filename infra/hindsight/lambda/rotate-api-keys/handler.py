@@ -140,12 +140,15 @@ def _update_k8s_secret(secret_data):
     with open("/tmp/ca.crt", "wb") as f:
         f.write(ca_data)
 
-    # Get bearer token via presigned STS URL
+    # Get bearer token via presigned STS URL and attach it directly as the
+    # Authorization header. NOTE: configuration.api_key={"authorization": ...}
+    # does NOT work here — the kubernetes client keys bearer auth under the
+    # security-scheme name "BearerToken", not "authorization", so that form
+    # sends the request anonymously (apiserver sees user:{}, returns 401).
+    # Setting the default header is version-independent and unambiguous.
     token = _get_eks_token(cluster_name, region)
-    configuration.api_key = {"authorization": token}
-    configuration.api_key_prefix = {"authorization": "Bearer"}
-
     api_client = kubernetes.client.ApiClient(configuration)
+    api_client.set_default_header("Authorization", "Bearer " + token)
     v1 = kubernetes.client.CoreV1Api(api_client)
     apps_v1 = kubernetes.client.AppsV1Api(api_client)
 
@@ -193,59 +196,33 @@ def _update_k8s_secret(secret_data):
 
 
 def _get_eks_token(cluster_name, region):
-    """Generate a presigned URL token for EKS authentication (same as aws eks get-token).
+    """Generate a presigned-URL bearer token for EKS authentication.
 
-    Uses the STS presigned GetCallerIdentity URL approach that EKS expects.
+    Mirrors what `aws eks get-token` does: presign an STS GetCallerIdentity
+    request whose `x-k8s-aws-id` header is part of the SigV4 signature, then
+    base64url-encode it with the `k8s-aws-v1.` prefix. The header MUST be signed
+    (registered via a before-sign event handler) or EKS rejects the token 401.
     """
     import botocore.session
-    from botocore.auth import SigV4Auth
-    from botocore.awsrequest import AWSRequest
 
     session = botocore.session.get_session()
-    credentials = session.get_credentials().get_frozen_credentials()
+    client = session.create_client("sts", region_name=region)
 
-    # Build the STS GetCallerIdentity request
-    sts_url = f"https://sts.{region}.amazonaws.com/?Action=GetCallerIdentity&Version=2011-06-15"
+    # Register the cluster-name header so it is included in the signed headers.
+    def _add_header(request, **kwargs):
+        request.headers["x-k8s-aws-id"] = cluster_name
 
-    # Create the request with the required x-k8s-aws-id header
-    request = AWSRequest(method="GET", url=sts_url, headers={"x-k8s-aws-id": cluster_name})
-
-    # Sign it with SigV4
-    SigV4Auth(credentials, "sts", region).add_auth(request)
-
-    # Build the signed URL from the request (include auth in query string instead of headers)
-    # We need to use presigned URL format — rebuild with query params
-    from botocore.auth import HmacV1Auth
-    from urllib.parse import urlencode, quote
-
-    # Alternative: use generate_presigned_url via the STS client
-    sts_client = boto3.client("sts", region_name=region)
-
-    # Use the low-level botocore presigner
-    from botocore.signers import RequestSigner
-
-    service_model = sts_client._service_model
-    signer = RequestSigner(
-        service_model.service_id,
-        region,
-        "sts",
-        "v4",
-        session.get_credentials(),
-        session.get_component("event_emitter"),
+    client.meta.events.register(
+        "before-sign.sts.GetCallerIdentity", _add_header
     )
 
-    # Generate presigned URL for GetCallerIdentity
-    signed_url = signer.generate_presigned_url(
-        {
-            "method": "GET",
-            "url": f"https://sts.{region}.amazonaws.com/?Action=GetCallerIdentity&Version=2011-06-15",
-            "body": {},
-            "headers": {"x-k8s-aws-id": cluster_name},
-            "context": {},
-        },
-        region_name=region,
-        expires_in=60,
-        operation_name="",
+    signed_url = client.generate_presigned_url(
+        "get_caller_identity",
+        Params={},
+        ExpiresIn=60,
+        HttpMethod="GET",
     )
 
-    return "k8s-aws-v1." + base64.urlsafe_b64encode(signed_url.encode("utf-8")).decode("utf-8").rstrip("=")
+    return "k8s-aws-v1." + base64.urlsafe_b64encode(
+        signed_url.encode("utf-8")
+    ).decode("utf-8").rstrip("=")
