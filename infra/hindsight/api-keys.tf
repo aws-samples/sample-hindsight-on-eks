@@ -100,6 +100,18 @@ resource "aws_iam_role_policy" "rotate_api_keys" {
         Resource = aws_secretsmanager_secret.hindsight_api_keys.arn
       },
       {
+        # The api-keys secret is encrypted with the customer-managed CMK
+        # (aws_kms_key.hindsight). Secrets Manager Get/PutSecretValue therefore
+        # require the caller to be able to use the key: Decrypt to read the
+        # current secret, GenerateDataKey to write a new version.
+        Effect = "Allow"
+        Action = [
+          "kms:Decrypt",
+          "kms:GenerateDataKey",
+        ]
+        Resource = aws_kms_key.hindsight.arn
+      },
+      {
         Effect   = "Allow"
         Action   = ["cognito-idp:ListUsers"]
         Resource = "arn:aws:cognito-idp:${var.aws_region}:${data.aws_caller_identity.current.account_id}:userpool/${local.cognito_user_pool_id}"
@@ -119,14 +131,13 @@ resource "aws_iam_role_policy" "rotate_api_keys" {
         Resource = "arn:aws:logs:${var.aws_region}:${data.aws_caller_identity.current.account_id}:*"
       },
       {
-        # VPC access for Lambda ENIs. CreateNetworkInterface /
-        # DeleteNetworkInterface are scoped to ENI, subnet, and security group
-        # resources in this account+region (the ENIs are created dynamically,
-        # so a wildcard within these resource types is required).
+        # VPC access for Lambda ENIs. CreateNetworkInterface is scoped to ENI,
+        # subnet, and security group resources in this account+region (the ENIs
+        # are created dynamically, so a wildcard within these resource types is
+        # required).
         Effect = "Allow"
         Action = [
           "ec2:CreateNetworkInterface",
-          "ec2:DeleteNetworkInterface",
         ]
         Resource = [
           "arn:aws:ec2:${var.aws_region}:${data.aws_caller_identity.current.account_id}:network-interface/*",
@@ -135,11 +146,17 @@ resource "aws_iam_role_policy" "rotate_api_keys" {
         ]
       },
       {
-        # DescribeNetworkInterfaces does not support resource-level
-        # permissions and must use "*". It is a read-only, non-restrictable
-        # action.
-        Effect   = "Allow"
-        Action   = ["ec2:DescribeNetworkInterfaces"]
+        # DeleteNetworkInterface and DescribeNetworkInterfaces must use "*".
+        # AWS validates DeleteNetworkInterface at Lambda function-creation time
+        # without a resource context, so a scoped ARN fails with
+        # "execution role does not have permissions to call DeleteNetworkInterface
+        # on EC2". DescribeNetworkInterfaces does not support resource-level
+        # permissions at all. Both are required for VPC-attached Lambdas.
+        Effect = "Allow"
+        Action = [
+          "ec2:DeleteNetworkInterface",
+          "ec2:DescribeNetworkInterfaces",
+        ]
         Resource = "*"
       },
     ]
