@@ -14,7 +14,7 @@ The deployment runs three flows that share a few nodes (Cognito, the API pod,
 Secrets Manager): the MCP request/inference path, on-demand API-key retrieval,
 and the daily key rotation.
 
-![Component diagram: client, ingress & identity, EKS Fargate workloads, storage, Bedrock, and the per-user API key lifecycle](diagrams/component-diagram.drawio.svg)
+![Component diagram: client, ingress & identity, EKS workloads (Fargate or Auto Mode), storage, Bedrock, and the per-user API key lifecycle](diagrams/component-diagram.drawio.svg)
 
 ## Components
 
