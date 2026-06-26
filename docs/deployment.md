@@ -31,7 +31,7 @@ Edit `terraform.tfvars` and set just three values for the self-contained path:
 |---|---|
 | `aws_region` | The region where you want resources (e.g., `us-east-1`). Must support Bedrock. |
 | `aws_profile` | Your AWS CLI profile name (admin-level for the first apply). |
-| `db_password` | A strong random value: `openssl rand -base64 24`. Save this somewhere — Terraform won't show it again. |
+| `db_password` | A strong random value: `openssl rand -hex 24` (avoid `/`, `@`, `"`, and spaces — RDS rejects them in master passwords). Save this somewhere — Terraform won't show it again. |
 
 `bedrock_model_id` defaults to `openai.gpt-oss-120b-1:0` and can be left as-is. Leave the optional `public_endpoint`, bring-your-own-pool, and `federation` blocks commented out for now.
 
@@ -76,6 +76,28 @@ kubectl get pods -n hindsight
 This writes credentials to `~/.kube/config` (the default location). If you need to use a non-default kubeconfig path, set `KUBECONFIG` in your environment before running `terraform apply` so that subsequent `kubectl patch` calls during the apply find the right cluster.
 
 Expected: `hindsight-api`, `hindsight-worker`, `hindsight-control-plane`, and `litellm-proxy` pods all `Running`. Initial scheduling can take 2 minutes per pod on Fargate; if any pod is `Pending` for longer than 5 minutes, `kubectl describe pod -n hindsight <pod>` will show why (commonly: insufficient subnet capacity or wrong subnet tags).
+
+### Deploying on EKS Auto Mode (optional)
+
+By default this sample runs on Fargate. To use EKS Auto Mode instead, set `compute_mode = "auto"` in `terraform.tfvars` before the first `terraform apply`. The mode is chosen at cluster creation; switching an existing cluster between modes is not supported and requires recreating it.
+
+In Auto Mode the cluster runs AWS-managed EC2 nodes instead of Fargate. After apply, smoke-test the Auto Mode path:
+
+```sh
+# Pods should land on EC2 instances (node names start with "i-"), not "fargate-*".
+kubectl get pods -n hindsight -o wide
+
+# Confirm the managed node pools exist and are Ready.
+kubectl get nodepool
+
+# Confirm the ALB/ingress still came up (the self-managed LB controller runs in both modes).
+kubectl get ingress -n hindsight
+
+# Confirm the dashboard still enforces Cognito OIDC: browsing to cp.<your-domain>
+# should redirect to the Cognito hosted UI before the Control Plane loads.
+```
+
+Both compute modes are verified end-to-end (apply, workload health, and a clean `terraform destroy`). After an Auto Mode deploy, run the four checks above to confirm the cluster came up on EC2 nodes with the dashboard's OIDC gate intact.
 
 ## Step 5: Port-forward the API and Control Plane
 

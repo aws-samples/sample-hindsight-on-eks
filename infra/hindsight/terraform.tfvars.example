@@ -9,9 +9,17 @@
 
 aws_region  = "us-east-1"                  # AWS region for all resources
 aws_profile = "default"                    # AWS CLI profile (admin-level for first apply)
-db_password = "CHANGE_ME_STRONG_PASSWORD"  # openssl rand -base64 24
+db_password = "CHANGE_ME_STRONG_PASSWORD"  # openssl rand -hex 24  (avoid / @ " and spaces — RDS rejects them)
 
 # bedrock_model_id defaults to openai.gpt-oss-120b-1:0 (auto-enabled on first use).
+
+# ============================================================
+# OPTIONAL: COMPUTE MODE
+# Defaults to "fargate" (the tested path). Set to "auto" to provision the
+# cluster on EKS Auto Mode (AWS-managed EC2 nodes) instead. Choose at creation
+# time — switching in place is not supported.
+# ============================================================
+# compute_mode = "auto"
 
 # ============================================================
 # OPTIONAL: PUBLIC ENDPOINT

@@ -14,11 +14,11 @@ The deployment runs three flows that share a few nodes (Cognito, the API pod,
 Secrets Manager): the MCP request/inference path, on-demand API-key retrieval,
 and the daily key rotation.
 
-![Component diagram: client, ingress & identity, EKS Fargate workloads, storage, Bedrock, and the per-user API key lifecycle](diagrams/component-diagram.drawio.svg)
+![Component diagram: client, ingress & identity, EKS workloads (Fargate or Auto Mode), storage, Bedrock, and the per-user API key lifecycle](diagrams/component-diagram.drawio.svg)
 
 ## Components
 
-### EKS Fargate
+### EKS compute (Fargate by default, Auto Mode optional)
 - Single namespace `hindsight`
 - Three pods from one Helm release: `hindsight-api`, `hindsight-worker`, `hindsight-control-plane`
 - One sidecar deployment: `litellm-proxy`
@@ -87,9 +87,18 @@ JWTs are great for interactive MCP sessions — short lifetime, refreshed automa
 
 Hindsight's `litellm-sdk` provider passes whatever value is in `api_key` as a Bearer token on outgoing HTTP calls, which clobbers the AWS SigV4 signing that Bedrock requires. Switching to the `litellm` (proxy) provider lets us configure the model with `api_key=None` so no Bearer header gets attached, and the proxy itself handles Bedrock auth using its own IRSA credentials. The proxy is a small, stateless deployment that adds one network hop but unlocks Bedrock SigV4 transparently for all Hindsight LLM, embeddings, and reranker calls.
 
-### Why Fargate (instead of managed nodes)
+### Why Fargate by default (and how to use Auto Mode)
 
-Fargate removes node management entirely — no autoscaler tuning, no AMI patching, no draining nodes for upgrades — and bills per-pod, which fits a workload that scales modestly. The tradeoff is slow pod scheduling (~2 minutes for cold starts), which is why Helm uses a 600s timeout and probes use a 120s `initialDelaySeconds`. Fargate also has no GPU support, but that's a non-issue here because all inference is delegated to Bedrock.
+Fargate removes node management entirely — no autoscaler tuning, no AMI patching, no draining nodes for upgrades — and bills per-pod, which fits a workload that scales modestly. The tradeoff is slow pod scheduling (~2 minutes for cold starts), which is why Helm uses a 600s timeout and probes use a 120s `initialDelaySeconds`. Fargate also has no GPU support, but that's a non-issue here because all inference is delegated to Bedrock. Fargate is the **default** for this sample; Auto Mode is a fully supported, verified alternative (see below).
+
+AWS now positions **EKS Auto Mode** as the recommended approach going forward, so it is available as an opt-in via `compute_mode = "auto"`. Auto Mode runs AWS-managed EC2 nodes (Karpenter-provisioned Bottlerocket) instead of Fargate, with faster pod scheduling and support for GPU/Spot and full Kubernetes conformance — advantages this small, Bedrock-delegated workload doesn't currently need, which is why Fargate remains the default.
+
+Two deliberate choices keep the toggle small:
+
+- **The self-managed AWS Load Balancer Controller is retained in both modes.** Auto Mode ships a built-in load balancer controller, but it does not support ALB OIDC authentication (`alb.ingress.kubernetes.io/auth-type: oidc`), which this stack uses to gate the Control Plane dashboard at the ALB. Keeping the self-managed controller preserves OIDC auth, the shared ingress group, and the `alb_drain` teardown logic unchanged.
+- **IRSA is used for pod AWS access in both modes.** EKS Pod Identity is not supported on Fargate (its agent runs as a `hostNetwork` DaemonSet, which Fargate has no nodes for), so IRSA is the only credential mechanism that works uniformly across both compute modes. Pod Identity could be a future enhancement scoped to the Auto Mode path only.
+
+The compute mode is chosen at cluster creation. Switching in place is not supported (disabling Auto Mode is a sticky, multi-step operation), so changing modes on an existing deployment effectively means recreating the cluster.
 
 ### Why Bedrock Rerank IAM needs `Resource: "*"`
 

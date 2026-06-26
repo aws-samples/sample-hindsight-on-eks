@@ -1,12 +1,12 @@
 # sample-hindsight-on-eks
 
-A reference deployment of [Hindsight](https://github.com/vectorize-io/hindsight) — a self-hosted persistent memory system for AI agents — on AWS EKS Fargate, with Aurora Serverless v2 + pgvector, S3, Bedrock-backed LLM and embeddings, and Cognito authentication.
+A reference deployment of [Hindsight](https://github.com/vectorize-io/hindsight) — a self-hosted persistent memory system for AI agents — on AWS EKS (Fargate by default, EKS Auto Mode optional), with Aurora Serverless v2 + pgvector, S3, Bedrock-backed LLM and embeddings, and Cognito authentication.
 
 > **Disclaimer:** This is sample code for educational purposes and is not intended for production use without security review. Costs incurred from deploying this sample are your responsibility. Review the IAM policies, security groups, and Cognito configuration against your organization's standards before deploying.
 
 ## What this deploys
 
-- **EKS Fargate** running the Hindsight API, worker, and Control Plane pods
+- **EKS** running the Hindsight API, worker, and Control Plane pods — on **Fargate** by default, or **EKS Auto Mode** via `compute_mode = "auto"`
 - **Aurora Serverless v2 (PostgreSQL + pgvector)** for memory storage, scales to near-zero when idle
 - **S3** bucket for file uploads
 - **Application Load Balancer** with two hostnames (API + dashboard) and TLS via ACM
@@ -42,7 +42,7 @@ terraform plan
 terraform apply
 ```
 
-Deployment takes ~10 minutes (Fargate pod scheduling is slow).
+Deployment takes ~10 minutes (Fargate pod scheduling is slow). To deploy on EKS Auto Mode instead, set `compute_mode = "auto"` in `terraform.tfvars` before the first apply — the mode is chosen at cluster creation and cannot be switched in place.
 
 ## Authentication
 

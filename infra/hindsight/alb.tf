@@ -114,42 +114,53 @@ resource "null_resource" "alb_drain" {
       export KUBECONFIG="$KUBECONFIG_FILE"
       trap 'rm -f "$KUBECONFIG_FILE"' EXIT
 
+      REGION="${self.triggers.region}"
+      PROFILE="${self.triggers.profile}"
+      NS="${self.triggers.namespace}"
+      ALB_PREFIX="${self.triggers.alb_name_prefix}"
+
       # Build an isolated kubeconfig using the same profile/region as the providers.
       if ! aws eks update-kubeconfig \
         --name "${self.triggers.cluster_name}" \
-        --region "${self.triggers.region}" \
-        --profile "${self.triggers.profile}" >/dev/null 2>&1; then
+        --region "$REGION" \
+        --profile "$PROFILE" >/dev/null 2>&1; then
         echo "alb_drain: cluster unreachable; assuming already destroyed, skipping."
         exit 0
       fi
 
-      # Delete every ingress in the namespace (chart-managed API ingress +
-      # Terraform-managed Control Plane ingress). Best-effort; the controller
-      # processes the finalizer and detaches each from the shared ALB.
-      kubectl delete ingress --all -n "${self.triggers.namespace}" \
-        --ignore-not-found --timeout=180s || true
+      # Delete ONLY the chart-managed API ingress ("hindsight"). The Terraform-
+      # managed Control Plane ingress ("hindsight-control-plane") is left for
+      # Terraform to delete itself -- deleting it here makes Terraform's own delete
+      # fail with "ingress ... not found". With the controller's IAM kept alive
+      # (see depends_on below), the controller processes each ingress's
+      # group.ingress.k8s.aws/<group> finalizer as it is deleted (here for the chart
+      # ingress, by Terraform for the control-plane ingress) and removes the shared
+      # ALB once the last group member is gone. --wait=false: we poll below.
+      kubectl delete ingress hindsight -n "$NS" --ignore-not-found --wait=false 2>/dev/null || true
 
-      # Wait until the shared ALB (tagged by the controller with the ingress
-      # group) is gone, so the controller has finished its cleanup before it is
-      # itself removed. Times out after ~5 minutes as a safety valve.
+      # Wait for the controller to actually process the chart ingress's finalizer
+      # (object fully gone). This is the health check that the controller is doing
+      # its job; if it is, it will likewise clean up the control-plane ingress that
+      # Terraform deletes next, and tear down the ALB. The controller normally
+      # clears a finalizer within a minute; allow ~5 as headroom.
       for i in $(seq 1 30); do
-        COUNT="$(aws elbv2 describe-load-balancers \
-          --region "${self.triggers.region}" \
-          --profile "${self.triggers.profile}" \
-          --query "length(LoadBalancers[?contains(LoadBalancerName, '${self.triggers.alb_name_prefix}')])" \
-          --output text 2>/dev/null || echo ERR)"
-        if [ "$COUNT" = "0" ]; then
-          echo "alb_drain: ALB drained."
+        if ! kubectl get ingress hindsight -n "$NS" >/dev/null 2>&1; then
+          echo "alb_drain: chart ingress finalizer processed by controller."
           exit 0
         fi
-        if [ "$COUNT" = "ERR" ] || [ "$COUNT" = "None" ]; then
-          echo "alb_drain: ALB query failed (transient?); retrying ($i/30)..."
-        else
-          echo "alb_drain: waiting for ALB to drain ($i/30)..."
-        fi
+        echo "alb_drain: waiting for controller to process chart ingress finalizer ($i/30)..."
         sleep 10
       done
-      echo "alb_drain: timed out waiting for ALB; continuing (see troubleshooting)."
+
+      # Fallback safety valve: the controller did not process the finalizer in time
+      # (e.g. it stopped reconciling). Clear the chart ingress finalizer directly so
+      # the teardown does not deadlock. We do NOT remove the controller or its
+      # webhooks (that blocks ingress mutation and creates phantom
+      # TargetGroupBindings); clearing the finalizer while the controller is up is
+      # the safe action.
+      echo "alb_drain: controller did not converge; clearing chart ingress finalizer."
+      kubectl patch ingress hindsight -n "$NS" --type=merge \
+        -p '{"metadata":{"finalizers":[]}}' 2>/dev/null || true
     EOT
   }
 
@@ -158,5 +169,19 @@ resource "null_resource" "alb_drain" {
     helm_release.hindsight,
     kubernetes_ingress_v1.control_plane_public,
     kubernetes_ingress_v1.control_plane_internal,
+    # Keep the controller's IRSA role/policy alive until alb_drain finishes, so the
+    # controller retains its elasticloadbalancing IAM permissions while draining.
+    module.lb_controller_irsa,
+    # CRITICAL: keep the VPC (and its NAT gateway) alive until alb_drain finishes.
+    # The controller pods reach the ELB API (elasticloadbalancing.<region>.
+    # amazonaws.com) via the NAT gateway. Terraform destroys a resource before the
+    # things it depends on, and the VPC module's NAT gateway is NOT in this root
+    # module's state, so without this dependency Terraform tears the NAT gateway
+    # down at the start of destroy -- in parallel with alb_drain -- severing the
+    # controller's only egress. The controller then logs
+    # 'Post "https://elasticloadbalancing...": dial tcp ...: i/o timeout' and can
+    # never delete the ALB or process finalizers (the real cause of the teardown
+    # deadlock). Depending on module.vpc keeps NAT/egress up until drain completes.
+    module.vpc,
   ]
 }

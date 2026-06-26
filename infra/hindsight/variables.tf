@@ -110,3 +110,16 @@ variable "federation" {
     error_message = "federation.type must be \"SAML\" or \"OIDC\"."
   }
 }
+
+# --- Compute mode ---
+
+variable "compute_mode" {
+  description = "EKS compute provider: \"fargate\" (default, runs all pods on Fargate) or \"auto\" (EKS Auto Mode managed EC2 nodes). Fargate is the tested default; Auto Mode is AWS's recommended path and an opt-in alternative. The mode is chosen at cluster creation — switching in place is not supported and effectively recreates the cluster."
+  type        = string
+  default     = "fargate"
+
+  validation {
+    condition     = contains(["fargate", "auto"], var.compute_mode)
+    error_message = "compute_mode must be \"fargate\" or \"auto\"."
+  }
+}

@@ -55,4 +55,21 @@ locals {
     Project   = var.project_name
     ManagedBy = "terraform"
   }
+
+  # true when provisioning the cluster on EKS Auto Mode rather than Fargate.
+  auto_mode = var.compute_mode == "auto"
+
+  # cluster_compute_config passed to the EKS module. In Auto Mode this is the
+  # populated object; in Fargate mode it must be an EMPTY map so the module omits
+  # the compute_config block entirely (EKS requires computeConfig,
+  # kubernetesNetworkConfig, and blockStorage to be all-enabled or all-disabled,
+  # and the module only renders network/storage when compute_config.enabled is
+  # true). A `for` with an `if` guard yields a truly empty map in Fargate mode
+  # without the ternary type-consistency error that `... ? {…} : {}` causes.
+  cluster_compute_config = {
+    for k, v in {
+      enabled    = true
+      node_pools = ["general-purpose", "system"]
+    } : k => v if local.auto_mode
+  }
 }
