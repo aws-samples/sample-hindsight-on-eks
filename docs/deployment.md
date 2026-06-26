@@ -31,7 +31,7 @@ Edit `terraform.tfvars` and set just three values for the self-contained path:
 |---|---|
 | `aws_region` | The region where you want resources (e.g., `us-east-1`). Must support Bedrock. |
 | `aws_profile` | Your AWS CLI profile name (admin-level for the first apply). |
-| `db_password` | A strong random value: `openssl rand -base64 24`. Save this somewhere — Terraform won't show it again. |
+| `db_password` | A strong random value: `openssl rand -hex 24` (avoid `/`, `@`, `"`, and spaces — RDS rejects them in master passwords). Save this somewhere — Terraform won't show it again. |
 
 `bedrock_model_id` defaults to `openai.gpt-oss-120b-1:0` and can be left as-is. Leave the optional `public_endpoint`, bring-your-own-pool, and `federation` blocks commented out for now.
 
