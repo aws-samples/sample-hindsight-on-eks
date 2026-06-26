@@ -79,7 +79,7 @@ Expected: `hindsight-api`, `hindsight-worker`, `hindsight-control-plane`, and `l
 
 ### Deploying on EKS Auto Mode (optional)
 
-By default this sample runs on Fargate, which is the validated path. To use EKS Auto Mode instead, set `compute_mode = "auto"` in `terraform.tfvars` before the first `terraform apply`. The mode is chosen at cluster creation; switching an existing cluster between modes is not supported and requires recreating it.
+By default this sample runs on Fargate. To use EKS Auto Mode instead, set `compute_mode = "auto"` in `terraform.tfvars` before the first `terraform apply`. The mode is chosen at cluster creation; switching an existing cluster between modes is not supported and requires recreating it.
 
 In Auto Mode the cluster runs AWS-managed EC2 nodes instead of Fargate. After apply, smoke-test the Auto Mode path:
 
@@ -97,7 +97,7 @@ kubectl get ingress -n hindsight
 # should redirect to the Cognito hosted UI before the Control Plane loads.
 ```
 
-Auto Mode is less battle-tested in this sample than the Fargate default — treat it as an opt-in and verify the four smoke-test items above before relying on it.
+Both compute modes are verified end-to-end (apply, workload health, and a clean `terraform destroy`). After an Auto Mode deploy, run the four checks above to confirm the cluster came up on EC2 nodes with the dashboard's OIDC gate intact.
 
 ## Step 5: Port-forward the API and Control Plane
 

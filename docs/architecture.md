@@ -89,7 +89,7 @@ Hindsight's `litellm-sdk` provider passes whatever value is in `api_key` as a Be
 
 ### Why Fargate by default (and how to use Auto Mode)
 
-Fargate removes node management entirely — no autoscaler tuning, no AMI patching, no draining nodes for upgrades — and bills per-pod, which fits a workload that scales modestly. The tradeoff is slow pod scheduling (~2 minutes for cold starts), which is why Helm uses a 600s timeout and probes use a 120s `initialDelaySeconds`. Fargate also has no GPU support, but that's a non-issue here because all inference is delegated to Bedrock. Fargate is the **default and the tested path** for this sample.
+Fargate removes node management entirely — no autoscaler tuning, no AMI patching, no draining nodes for upgrades — and bills per-pod, which fits a workload that scales modestly. The tradeoff is slow pod scheduling (~2 minutes for cold starts), which is why Helm uses a 600s timeout and probes use a 120s `initialDelaySeconds`. Fargate also has no GPU support, but that's a non-issue here because all inference is delegated to Bedrock. Fargate is the **default** for this sample; Auto Mode is a fully supported, verified alternative (see below).
 
 AWS now positions **EKS Auto Mode** as the recommended approach going forward, so it is available as an opt-in via `compute_mode = "auto"`. Auto Mode runs AWS-managed EC2 nodes (Karpenter-provisioned Bottlerocket) instead of Fargate, with faster pod scheduling and support for GPU/Spot and full Kubernetes conformance — advantages this small, Bedrock-delegated workload doesn't currently need, which is why Fargate remains the default.
 
