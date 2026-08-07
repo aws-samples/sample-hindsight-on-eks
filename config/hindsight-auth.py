@@ -23,6 +23,7 @@ import os
 import secrets
 import sys
 import threading
+import time
 import urllib.parse
 import urllib.request
 import webbrowser
@@ -99,9 +100,20 @@ def main():
     webbrowser.open(authorize_url)
     print("Waiting for browser callback (timeout: 120s)...")
 
-    # Wait for callback
-    server.handle_request()
-    server.server_close()
+    # Wait for callback. Browsers (esp. Chrome) open speculative preconnect
+    # sockets to localhost that send no request, so a single handle_request()
+    # can accept an empty socket and block forever in readline(). Loop until we
+    # actually get a code/error, bounded by an overall deadline. The short
+    # socket timeout ensures an empty/preconnect socket can't stall us.
+    deadline = time.monotonic() + 120
+    try:
+        while auth_result["code"] is None and auth_result["error"] is None:
+            if time.monotonic() >= deadline:
+                print("Timed out waiting for browser callback", file=sys.stderr)
+                sys.exit(1)
+            server.handle_request()
+    finally:
+        server.server_close()
 
     if auth_result["error"]:
         print(f"Authentication failed: {auth_result['error']}", file=sys.stderr)
@@ -134,8 +146,22 @@ def _start_callback_server(expected_state, result):
     """Start a local HTTP server to receive the OAuth callback."""
 
     class CallbackHandler(http.server.BaseHTTPRequestHandler):
+        # Bound reads on an accepted connection so an empty preconnect socket
+        # (accepted but never sending a request line) can't block readline()
+        # forever. On timeout, handle_one_request aborts the connection cleanly.
+        timeout = 5
+
         def do_GET(self):
-            params = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+            parsed = urllib.parse.urlparse(self.path)
+
+            # Ignore speculative preconnect hits, favicon requests, etc.
+            # Only the real OAuth redirect to /callback carries the code.
+            if parsed.path != "/callback":
+                self.send_response(204)
+                self.end_headers()
+                return
+
+            params = urllib.parse.parse_qs(parsed.query)
             state = params.get("state", [None])[0]
 
             if state != expected_state:
@@ -161,8 +187,11 @@ def _start_callback_server(expected_state, result):
         def log_message(self, format, *args):
             pass  # Suppress HTTP request logs
 
-    server = http.server.HTTPServer(("localhost", CALLBACK_PORT), CallbackHandler)
-    server.timeout = 120
+    server = http.server.HTTPServer(("127.0.0.1", CALLBACK_PORT), CallbackHandler)
+    # Short per-request timeout: bounds each accept()/handle_request() iteration
+    # so the caller's loop can re-check its overall deadline and so an empty
+    # preconnect socket can't block a read indefinitely.
+    server.timeout = 5
     return server
 
 
