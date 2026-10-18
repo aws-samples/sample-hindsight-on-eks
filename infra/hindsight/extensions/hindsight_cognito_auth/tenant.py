@@ -10,6 +10,8 @@ from jwt import PyJWKClient
 
 from hindsight_api.extensions import TenantExtension, TenantContext, Tenant, AuthenticationError
 
+from hindsight_cognito_auth.oauth import protected_resource_metadata_url
+
 
 class CognitoTenantExtension(TenantExtension):
     """Validates Cognito JWTs via JWKS and returns TenantContext with user identity.
@@ -45,6 +47,16 @@ class CognitoTenantExtension(TenantExtension):
         # Per-user API keys (rotated daily, loaded from env)
         self._user_api_keys = self._load_user_api_keys()
 
+        # WWW-Authenticate challenge for 401s. resource_metadata points MCP
+        # clients at the RFC 9728 document (served by CognitoOAuthExtension),
+        # which names Cognito as the authorization server.
+        public_url = os.environ.get("HINDSIGHT_API_TENANT_PUBLIC_URL", "")
+        if not public_url:
+            raise ValueError("HINDSIGHT_API_TENANT_PUBLIC_URL is required.")
+        self._challenge = (
+            f'Bearer realm="hindsight", resource_metadata="{protected_resource_metadata_url(public_url)}"'
+        )
+
         jwks_url = f"{self.issuer}/.well-known/jwks.json"
         self._jwks_client = PyJWKClient(jwks_url, cache_keys=True, lifespan=600)
 
@@ -53,7 +65,7 @@ class CognitoTenantExtension(TenantExtension):
         if not token:
             raise AuthenticationError(
                 "Authorization required",
-                headers={"WWW-Authenticate": 'Bearer realm="hindsight"'},
+                headers={"WWW-Authenticate": self._challenge},
             )
 
         # Allow internal service-to-service calls with the dataplane API key
@@ -89,12 +101,12 @@ class CognitoTenantExtension(TenantExtension):
         except jwt.ExpiredSignatureError:
             raise AuthenticationError(
                 "Token expired",
-                headers={"WWW-Authenticate": 'Bearer realm="hindsight", error="invalid_token"'},
+                headers={"WWW-Authenticate": f'{self._challenge}, error="invalid_token"'},
             )
         except jwt.InvalidTokenError as e:
             raise AuthenticationError(
                 f"Invalid token: {e}",
-                headers={"WWW-Authenticate": 'Bearer realm="hindsight", error="invalid_token"'},
+                headers={"WWW-Authenticate": f'{self._challenge}, error="invalid_token"'},
             )
 
         # Extract user alias from Cognito claims

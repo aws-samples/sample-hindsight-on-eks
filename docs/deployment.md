@@ -284,10 +284,23 @@ Confirm the callback URLs in the Cognito MCP app client match what your client u
 
 If your client uses a different port, add it to `aws_cognito_user_pool_client.hindsight_mcp.callback_urls` in `auth.tf` and re-apply.
 
+OpenCode 2.x picks a random callback port unless `callbackPort` is set, which also produces this error (`redirect_mismatch`). The `opencode_mcp_config` output sets `"callbackPort": 19876`; add it to existing configs and re-run `opencode mcp auth`.
+
 If you've changed the callback port, also set `HINDSIGHT_AUTH_CALLBACK_PORT` in your environment so the auth helper script uses the matching port:
 
 ```bash
 export HINDSIGHT_AUTH_CALLBACK_PORT=8080  # or whatever you chose
+```
+
+### OAuth "Issuer mismatch in authorization server metadata"
+
+`opencode mcp auth` fails with `Issuer mismatch in authorization server metadata (RFC 8414 §3.3): expected "https://<hindsight_domain>/", received "https://cognito-idp.<region>.amazonaws.com/<pool-id>"`.
+
+MCP clients that enforce RFC 8414 §3.3, including OpenCode 2.x, require the API to publish RFC 9728 protected resource metadata naming Cognito as the authorization server. The auth extension serves it at `/.well-known/oauth-protected-resource` and advertises it in the `WWW-Authenticate` header of every 401. Deployments created before this was added serve only the legacy `/.well-known/oauth-authorization-server` document, which strict clients reject. Re-apply Terraform and restart the API pods (see [AGENTS.md](../AGENTS.md#when-modifying-the-auth-extension)), then confirm:
+
+```bash
+curl -s https://<hindsight_domain>/.well-known/oauth-protected-resource
+# {"resource":"https://<hindsight_domain>","authorization_servers":["https://cognito-idp.<region>.amazonaws.com/<pool-id>"],...}
 ```
 
 ### `bedrock:Rerank AccessDenied`

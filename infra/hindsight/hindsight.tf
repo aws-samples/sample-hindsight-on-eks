@@ -231,6 +231,12 @@ resource "helm_release" "hindsight" {
     value = aws_cognito_user_pool_client.hindsight_mcp.id
   }
 
+  # Advertised in OAuth discovery so MCP clients find Cognito (RFC 9728)
+  set {
+    name  = "api.env.HINDSIGHT_API_TENANT_PUBLIC_URL"
+    value = local.hindsight_public_url
+  }
+
   set {
     name  = "api.env.PYTHONPATH"
     value = "/app"

@@ -8,6 +8,10 @@ locals {
   # IdP name: federation provider on the created pool, else the BYO var.
   cognito_idp_name   = local.create_pool ? (var.federation != null ? var.federation.provider_name : "") : var.cognito_idp_name
   cognito_idp_prefix = local.cognito_idp_name == "" ? "" : "${local.cognito_idp_name}_"
+
+  # Base URL MCP clients use to reach the API. The auth extension advertises it in
+  # OAuth discovery (RFC 9728), so it must match the URL in the MCP client config.
+  hindsight_public_url = var.public_endpoint ? "https://${var.hindsight_domain}" : "http://localhost:8888"
 }
 
 # MCP OAuth Client (public — for OpenCode CLI PKCE flow)

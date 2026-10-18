@@ -114,7 +114,8 @@ Add the output to your `opencode.json`:
       "url": "https://<your-domain>/mcp/<your-alias>/",
       "oauth": {
         "clientId": "<mcp_client_id>",
-        "scope": "openid email profile"
+        "scope": "openid email profile",
+        "callbackPort": 19876
       }
     },
     "hindsight-shared": {
@@ -122,7 +123,8 @@ Add the output to your `opencode.json`:
       "url": "https://<your-domain>/mcp/shared/",
       "oauth": {
         "clientId": "<mcp_client_id>",
-        "scope": "openid email profile"
+        "scope": "openid email profile",
+        "callbackPort": 19876
       }
     }
   }
@@ -130,6 +132,8 @@ Add the output to your `opencode.json`:
 ```
 
 OpenCode handles the PKCE flow automatically — on first use it opens a browser for Cognito login, then caches the tokens.
+
+`callbackPort` keeps OpenCode's local OAuth callback on a port Cognito accepts. OpenCode 2.x otherwise uses a random port, and Cognito rejects the login with `redirect_mismatch`. If you configured Hindsight before this field was added, add it to both entries and re-run `opencode mcp auth`.
 
 Before your first session, authenticate each MCP server:
 

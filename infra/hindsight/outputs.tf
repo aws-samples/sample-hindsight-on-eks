@@ -43,21 +43,26 @@ output "port_forward_commands" {
 
 output "opencode_mcp_config" {
   description = "Template OpenCode MCP server configuration. Replace <your-alias> with your Cognito username before pasting into opencode.json."
+  # callbackPort pins the local OAuth callback to a port in the MCP client's Cognito
+  # callback URLs (see auth.tf). OpenCode 2.x otherwise picks a random port, which
+  # Cognito rejects with redirect_mismatch.
   value = jsonencode({
     hindsight = {
       type = "remote"
-      url  = "${var.public_endpoint ? "https://${var.hindsight_domain}" : "http://localhost:8888"}/mcp/<your-alias>/"
+      url  = "${local.hindsight_public_url}/mcp/<your-alias>/"
       oauth = {
-        clientId = aws_cognito_user_pool_client.hindsight_mcp.id
-        scope    = "openid email profile"
+        clientId     = aws_cognito_user_pool_client.hindsight_mcp.id
+        scope        = "openid email profile"
+        callbackPort = 19876
       }
     }
     hindsight-shared = {
       type = "remote"
-      url  = "${var.public_endpoint ? "https://${var.hindsight_domain}" : "http://localhost:8888"}/mcp/shared/"
+      url  = "${local.hindsight_public_url}/mcp/shared/"
       oauth = {
-        clientId = aws_cognito_user_pool_client.hindsight_mcp.id
-        scope    = "openid email profile"
+        clientId     = aws_cognito_user_pool_client.hindsight_mcp.id
+        scope        = "openid email profile"
+        callbackPort = 19876
       }
     }
   })
