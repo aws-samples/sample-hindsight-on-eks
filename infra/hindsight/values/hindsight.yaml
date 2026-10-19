@@ -6,7 +6,7 @@ api:
   replicaCount: 1
   image:
     repository: ghcr.io/vectorize-io/hindsight-api
-    tag: "latest-slim"
+    tag: "1.0.0-slim"  # pinned: the auth extension is tested against this release
   resources:
     limits:
       cpu: 1000m
@@ -54,7 +54,7 @@ worker:
   replicaCount: 1
   image:
     repository: ghcr.io/vectorize-io/hindsight-api
-    tag: "latest-slim"
+    tag: "1.0.0-slim"  # pinned: the auth extension is tested against this release
   resources:
     limits:
       cpu: 1000m
