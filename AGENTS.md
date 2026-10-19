@@ -59,6 +59,7 @@ kubectl port-forward -n hindsight svc/hindsight-control-plane 3000:3000
 - **Bedrock Rerank IAM** needs `Resource: "*"` (can't scope to model ARNs).
 - **AWS profile** — set in `terraform.tfvars` (no default; required).
 - **`.terraform.lock.hcl` is gitignored** — intentional choice.
+- **`kubectl` in Terraform provisioners is self-contained** — `local-exec` steps (`patch_api_envfrom`, `alb_drain`) run `aws eks update-kubeconfig` into a `mktemp` file using `aws_profile`/`aws_region`, so they never touch the caller's `KUBECONFIG`. Keep new provisioners to this pattern; a bare `kubectl` targets whatever cluster the shell's kubeconfig points at.
 - **Hindsight image is pinned** — `values/hindsight.yaml` pins `hindsight-api` (API and worker) to a release tag, not `latest-slim`. The auth extension depends on Hindsight's extension interfaces, so upgrade deliberately: bump both tags, then re-check MCP OAuth discovery and login.
 - **hindsight-client SDK** — installed from PyPI via `config/setup-venv.sh` (`hindsight-client>=0.7.2`).
 - **Per-user API keys** — rotated daily at 05:00 UTC by Lambda; both current and previous keys valid (grace period). Keys synced to K8s secret via rotation Lambda's EKS access.

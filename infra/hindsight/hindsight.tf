@@ -308,13 +308,36 @@ resource "helm_release" "hindsight" {
 
 # Patch the API deployment to mount the per-user API keys secret as envFrom
 # The Hindsight Helm chart doesn't support extraEnvFrom, so we patch directly.
+# Runs after every Helm upgrade (the upgrade re-renders the deployment and drops
+# the patch). kubectl uses a temporary kubeconfig for this cluster only, built
+# from the same profile/region as the providers, so the caller's KUBECONFIG or
+# ~/.kube/config is never read or modified. The patch is skipped when the
+# secretRef is already present, so re-runs don't append duplicates.
 resource "null_resource" "patch_api_envfrom" {
   triggers = {
     helm_revision = helm_release.hindsight.metadata[0].revision
   }
 
   provisioner "local-exec" {
-    command = <<-EOT
+    interpreter = ["bash", "-c"]
+    command     = <<-EOT
+      set -euo pipefail
+      KUBECONFIG_FILE="$(mktemp)"
+      export KUBECONFIG="$KUBECONFIG_FILE"
+      trap 'rm -f "$KUBECONFIG_FILE"' EXIT
+
+      aws eks update-kubeconfig \
+        --name "${module.eks.cluster_name}" \
+        --region "${var.aws_region}" \
+        --profile "${var.aws_profile}" >/dev/null
+
+      if kubectl get deployment hindsight-api -n hindsight \
+        -o jsonpath='{.spec.template.spec.containers[0].envFrom[*].secretRef.name}' \
+        | tr ' ' '\n' | grep -qx 'hindsight-api-keys'; then
+        echo "patch_api_envfrom: hindsight-api-keys already attached, skipping."
+        exit 0
+      fi
+
       kubectl patch deployment hindsight-api -n hindsight \
         --type=json \
         -p '[{"op": "add", "path": "/spec/template/spec/containers/0/envFrom/-", "value": {"secretRef": {"name": "hindsight-api-keys"}}}]'

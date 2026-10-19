@@ -73,7 +73,7 @@ aws eks update-kubeconfig \
 kubectl get pods -n hindsight
 ```
 
-This writes credentials to `~/.kube/config` (the default location). If you need to use a non-default kubeconfig path, set `KUBECONFIG` in your environment before running `terraform apply` so that subsequent `kubectl patch` calls during the apply find the right cluster.
+This writes credentials to `~/.kube/config` (the default location); pass `--kubeconfig <path>` to keep a separate file per cluster. `terraform apply` does not depend on this step: the `kubectl` calls it makes during apply and destroy build a temporary kubeconfig for this cluster from `aws_profile` and `aws_region`, and never read or modify your `KUBECONFIG`.
 
 Expected: `hindsight-api`, `hindsight-worker`, `hindsight-control-plane`, and `litellm-proxy` pods all `Running`. Initial scheduling can take 2 minutes per pod on Fargate; if any pod is `Pending` for longer than 5 minutes, `kubectl describe pod -n hindsight <pod>` will show why (commonly: insufficient subnet capacity or wrong subnet tags).
 
