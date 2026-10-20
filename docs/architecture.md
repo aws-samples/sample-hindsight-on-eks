@@ -43,6 +43,7 @@ and the daily key rotation.
   - **MCP client** — public, PKCE-only, used by OpenCode/Claude Code OAuth flows
   - **ALB OIDC client** — confidential, used by ALB to gate browser sessions for the Control Plane dashboard
 - Federation (SAML/OIDC IdP) is optional; see `docs/federation.md`
+- MCP clients discover Cognito through the API: a 401's `WWW-Authenticate` header points at `/.well-known/oauth-protected-resource` (RFC 9728), which lists Cognito as the authorization server. Clients then read Cognito's own discovery document. A legacy `/.well-known/oauth-authorization-server` document is still served for older clients.
 
 ### LiteLLM proxy
 - Sidecar deployment, port 4000

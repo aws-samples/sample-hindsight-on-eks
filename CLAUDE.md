@@ -22,7 +22,7 @@ LLM calls go direct to Bedrock (native provider); embeddings/reranker route thro
 
 Python files in `extensions/hindsight_cognito_auth/`:
 - `tenant.py` — JWT validation via JWKS, bank ownership enforcement, alias extraction from IdP claims
-- `oauth.py` — serves `/.well-known/oauth-authorization-server` for MCP client discovery
+- `oauth.py` — serves OAuth discovery for MCP clients: `/.well-known/oauth-protected-resource` (RFC 9728, names Cognito as the authorization server) and the legacy `/.well-known/oauth-authorization-server`. Requires `HINDSIGHT_API_TENANT_PUBLIC_URL`, which `tenant.py` also uses for the `resource_metadata` link in 401 challenges
 
 ### Validation
 
