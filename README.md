@@ -50,38 +50,40 @@ Hindsight supports two authentication methods:
 
 | Method | Used by | Token lifetime | How to authenticate |
 |--------|---------|---------------|---------------------|
-| **OAuth2/PKCE (JWT)** | MCP servers (OpenCode, Claude Code) | 12 hours | `opencode mcp auth hindsight` |
-| **Per-user API key** | Config scripts, plugins, direct API calls | 24 hours (rotated daily at 05:00 UTC) | `./config/hindsight-auth.sh` |
+| **Per-user API key** | The coding-agents plugin, config scripts, direct API calls | 24 hours (rotated daily at 05:00 UTC) | `./config/hindsight-auth.sh` |
+| **OAuth2/PKCE (JWT)** | MCP clients (optional, see [MCP Servers (Optional)](#mcp-servers-optional)) | 12 hours | `opencode mcp auth <server>` |
 
-Both methods authenticate via Cognito/your IdP in the browser. The difference is what you get back: MCP tools use short-lived JWTs directly, while the API key flow exchanges a JWT for a stable `hsk_*` key that works across tools.
+Both methods sign in through Cognito (federated to your IdP if configured) in the browser. The API key flow swaps the JWT for a stable `hsk_*` key that works in any tool. The day-to-day setup only needs the API key.
 
 ### Daily Auth Routine
 
-Run once per day (or when you see "Token expired" errors):
+Run once per day (or when memory calls start returning 401):
 
 ```bash
-# 1. MCP servers (for opencode/claude code interactive sessions)
-opencode mcp auth hindsight
-opencode mcp auth hindsight-shared
-
-# 2. API key (for config scripts, plugins, and direct API calls)
 ./config/hindsight-auth.sh
 ```
 
-The auth script opens a browser for Cognito sign-in, fetches your personal API key from `auth.<your-domain>/my-key`, and caches it to `~/.hindsight/token` (mode 0600). It uses only the Python standard library — no venv or pip install required.
+The script needs the `HINDSIGHT_COGNITO_*` and `HINDSIGHT_KEY_ENDPOINT` environment variables (see [`config/README.md`](config/README.md)). It opens a browser for Cognito sign-in and fetches your personal API key from `auth.<your-domain>/my-key`. It saves the key in two places (both mode 0600):
+
+- `~/.hindsight/token`, used by scripts and `HINDSIGHT_API_TOKEN`
+- `apiToken` in `~/.hindsight/coding-agent.json`, but only if that file already exists
+
+The second write is what keeps a long-running agent working. A background service such as `opencode serve` keeps the environment it started with, so `HINDSIGHT_API_TOKEN` goes stale after rotation. The plugin, though, re-reads `apiToken` from its config file whenever a request is rejected, so it picks up the new key without a restart.
+
+The script uses only the Python standard library, so it needs no venv or `pip install`.
 
 ### Shell Environment
 
-Add to your `~/.zshrc`:
+For scripts and direct API calls, add this to your `~/.zshrc`:
 
 ```bash
 # Hindsight API key (cached by hindsight-auth.sh)
 export HINDSIGHT_API_TOKEN=$(cat ~/.hindsight/token 2>/dev/null)
 export HINDSIGHT_API_URL="https://<your-domain>"
-export HINDSIGHT_BANK_ID=$(whoami)
 ```
 
-Then restart your shell or `source ~/.zshrc` after running the auth script.
+> **Do not export `HINDSIGHT_BANK_ID`.** The coding-agents plugin treats it as a fixed bank, so
+> every repo ends up writing to that one bank instead of its own.
 
 ### How API Keys Work
 
@@ -92,194 +94,173 @@ Then restart your shell or `source ~/.zshrc` after running the auth script.
 - The tenant extension validates keys by lookup (O(1) hash map, no network call)
 - No AWS credentials needed on developer laptops — just the cached `hsk_*` key
 
-## Configuring MCP Servers
+## Memory Client: hindsight-coding-agents Plugin
+
+Coding agents reach memory through upstream's
+[`@vectorize-io/hindsight-coding-agents`](https://github.com/vectorize-io/hindsight/tree/main/hindsight-integrations/coding-agents)
+plugin. It works with OpenCode (1.x and 2.x), Claude Code, Codex CLI, Cursor CLI and other agents,
+and replaces the older per-agent `@vectorize-io/opencode-hindsight` and `hindsight-memory` plugins.
+The old OpenCode plugin does not load on OpenCode 2.x.
+
+### What it does
+
+- **One bank per repo.** The bank is `project-<repo>`, where `<repo>` is the folder name of the
+  main worktree. Worktrees of a repo share its bank, and every agent you use in that repo shares it too.
+- **Seeds itself.** The first time a repo is opened, its bank is seeded from recent commits and a
+  read-only survey of the codebase. Each session start then adds new commits and conversations in
+  the background and keeps a set of knowledge pages up to date.
+- **Injects memory automatically.** On a session's first prompt it adds memory to the context. By
+  default that's a short `reflect` synthesis over the bank. The agent doesn't need to call a tool.
+- **Writes back.** Session transcripts are retained into the bank automatically.
+- **Tools.** The agent also gets `hindsight_search_knowledge_pages`, `hindsight_read_knowledge_page`,
+  `hindsight_reflect`, `hindsight_ingest_document`, `hindsight_capture_initiative` and
+  `hindsight_diagnose`. On OpenCode they are native tools; on hook-based agents they come from
+  a local MCP server that the installer registers.
+
+### Configure
+
+All settings live in one file, `~/.hindsight/coding-agent.json`. Terraform prints a template:
+
+```bash
+cd infra/hindsight
+mkdir -p ~/.hindsight
+terraform output -raw coding_agent_config | python3 -m json.tool > ~/.hindsight/coding-agent.json
+chmod 600 ~/.hindsight/coding-agent.json
+cd ../..
+./config/hindsight-auth.sh   # fills in apiToken
+```
+
+The result looks like this:
+
+```json
+{
+  "serverMode": "self-hosted",
+  "apiUrl": "https://<your-domain>",
+  "apiToken": "<your hsk_* key>",
+  "bankIdTemplate": "project-{gitProject}",
+  "dynamicBankId": true
+}
+```
+
+| Field | Why it's set this way |
+|-------|-----------------------|
+| `serverMode: self-hosted` | Use this deployment rather than Hindsight Cloud or a local daemon |
+| `apiToken` | Written by `hindsight-auth.sh` on every run. Don't edit it by hand. |
+| `bankIdTemplate: project-{gitProject}` | Upstream's default is `coding-agent::{gitProject}`. The `project-` prefix matches the shared-bank naming in the auth extension (`tenant.py`). |
+| `dynamicBankId: true` | Resolve the bank per repo, not as one fixed bank |
+
+Other settings worth knowing about (the defaults are fine to start with):
+
+| Field | Default | Notes |
+|-------|---------|-------|
+| `autoInject` | `"reflect"` | What gets injected on the first prompt: `reflect`, `pages`, `recall` or `none` |
+| `reflectBudget` | `"high"` | Budget for the `hindsight_reflect` tool: `low`, `mid` or `high` |
+| `codebaseSurvey` | `true` | The first time a repo is opened, a read-only survey runs through an agent CLI, which costs tokens. Set `false` to skip it. |
+| `retainSessions` | `true` | Write session transcripts back to the bank |
+| `autoUpdate` | `true` | Once a day, re-downloads a newer plugin runtime into `~/.hindsight/coding-agents`. It never edits your agent's config. |
+
+The old plugins' settings (`autoRecall`, `autoRetain`, `recallBudget`, `retainEveryNTurns`,
+`hindsightApiUrl`, `hindsightApiToken`, …) are not read by this plugin. The full settings reference is
+in the [plugin README](https://github.com/vectorize-io/hindsight/tree/main/hindsight-integrations/coding-agents).
+
+### Install
+
+Pick the agent(s) to wire. `--server self-hosted` answers the installer's "where should memory
+live" question up front:
+
+```bash
+npx @vectorize-io/hindsight-coding-agents install opencode2 --server self-hosted     # OpenCode 2.x
+npx @vectorize-io/hindsight-coding-agents install opencode --server self-hosted      # OpenCode 1.x
+npx @vectorize-io/hindsight-coding-agents install claude-code --server self-hosted   # Claude Code
+npx @vectorize-io/hindsight-coding-agents install all --server self-hosted           # every agent it detects
+```
+
+The installer puts the runtime in `~/.hindsight/coding-agents` and wires each agent.
+
+> **OpenCode 2.x:** the installer writes the 1.x `plugin` key. If your config uses the 2.x
+> `plugins` list, move the entry there yourself and delete the `plugin` key, or the plugin
+> loads twice:
+>
+> ```jsonc
+> { "plugins": ["/Users/<you>/.hindsight/coding-agents"] }
+> ```
+
+Restart the agent afterwards. If OpenCode runs as a background service (`opencode service restart`),
+start it from a shell that does **not** export `HINDSIGHT_BANK_ID`.
+
+### Verify
+
+In a session inside a git repo, ask the agent to run `hindsight_diagnose`. You should see:
+
+- `bank_id: project-<repo>` (not a personal alias or the bank from `HINDSIGHT_BANK_ID`)
+- `credential.api_token_in_use: true` and `api_token_matches_config: true`
+
+If the bank is wrong, check the agent process's environment for a stale `HINDSIGHT_BANK_ID`.
+
+### Caveats
+
+- **Banks are named after the folder, not the remote.** Two unrelated repos checked out under
+  the same folder name share a bank. If that matters, use `mapPathToBank` in the plugin config.
+- **Bank listing isn't per-user.** All banks live in one schema, so `GET /v1/default/banks`
+  shows every bank on the server.
+- **Bank access isn't enforced yet.** `_check_bank_access` in the auth extension currently allows
+  every bank, and it only runs on `/mcp/...` paths. Any authenticated user can reach any bank.
+
+## MCP Servers (Optional)
+
+The plugin covers day-to-day memory without MCP. MCP is still useful for reaching a specific bank
+outside the current repo, such as a personal or team bank (see [Bank Configuration](#bank-configuration)).
+The server exposes per-bank MCP endpoints with OAuth2/PKCE.
 
 ### OpenCode
-
-After deployment, get the MCP config:
 
 ```bash
 cd infra/hindsight
 terraform output opencode_mcp_config
 ```
 
-Add the output to your `opencode.json`:
-
-```json
-{
-  "$schema": "https://opencode.ai/config.json",
-  "mcp": {
-    "hindsight": {
-      "type": "remote",
-      "url": "https://<your-domain>/mcp/<your-alias>/",
-      "oauth": {
-        "clientId": "<mcp_client_id>",
-        "scope": "openid email profile",
-        "callbackPort": 19876
-      }
-    },
-    "hindsight-shared": {
-      "type": "remote",
-      "url": "https://<your-domain>/mcp/shared/",
-      "oauth": {
-        "clientId": "<mcp_client_id>",
-        "scope": "openid email profile",
-        "callbackPort": 19876
-      }
-    }
-  }
-}
-```
-
-OpenCode handles the PKCE flow automatically — on first use it opens a browser for Cognito login, then caches the tokens.
-
-`callbackPort` keeps OpenCode's local OAuth callback on a port Cognito accepts. OpenCode 2.x otherwise uses a random port, and Cognito rejects the login with `redirect_mismatch`. If you configured Hindsight before this field was added, add it to both entries and re-run `opencode mcp auth`.
-
-Before your first session, authenticate each MCP server:
+That prints an `mcp` block for `opencode.json` with two remote servers: `hindsight`
+(`https://<your-domain>/mcp/<your-alias>/`) and `hindsight-shared` (`https://<your-domain>/mcp/shared/`).
+Each has `oauth.clientId`, `scope: "openid email profile"` and `callbackPort: 19876`. Replace
+`<your-alias>` with your Cognito username, then authenticate each server once:
 
 ```bash
 opencode mcp auth hindsight
 opencode mcp auth hindsight-shared
 ```
 
+OpenCode prefixes each server's tools with its name, so the agent sees `hindsight_recall` (personal)
+and `hindsight-shared_recall` (team). If you also run the plugin, rename the personal server
+(for example `hindsight-personal`): its `hindsight_reflect` tool would otherwise have the same name
+as the plugin's.
+
 ### Claude Code
 
-Add the MCP servers using the CLI:
-
 ```bash
-# Shared team bank (--scope user writes to ~/.claude.json)
-claude mcp add --transport http hindsight-shared \
-  https://<your-domain>/mcp/shared/ \
-  --client-id <mcp_client_id> \
-  --callback-port 19876 \
-  --scope user
-
-# Personal bank
-claude mcp add --transport http hindsight \
-  https://<your-domain>/mcp/<your-alias>/ \
-  --client-id <mcp_client_id> \
-  --callback-port 19876 \
-  --scope user
+claude mcp add --transport http hindsight-shared https://<your-domain>/mcp/shared/ \
+  --client-id <COGNITO_CLIENT_ID> --callback-port 19876 --scope user
+claude mcp add --transport http hindsight-personal https://<your-domain>/mcp/<your-alias>/ \
+  --client-id <COGNITO_CLIENT_ID> --callback-port 19876 --scope user
 ```
 
-Then inside a Claude Code session, run `/mcp` to list your MCP servers and authenticate if needed.
+Then run `/mcp` inside a session to authenticate. `terraform output mcp_client_id` gives the client ID.
 
-## Plugins (Auto-Retain + Auto-Recall)
+### Notes
 
-The MCP servers above give the agent explicit retain/recall/reflect tools. The **plugins** go further — they automatically capture conversations and inject recalled context on every prompt, with no agent action required.
-
-Both plugins use the per-user API key (`hsk_*`) for authentication.
-
-### OpenCode Plugin
-
-Add to your global `~/.config/opencode/opencode.json`:
-
-```json
-{
-  "$schema": "https://opencode.ai/config.json",
-  "plugin": [
-    ["@vectorize-io/opencode-hindsight", {
-      "hindsightApiUrl": "https://<your-domain>",
-      "hindsightApiToken": "<your hsk_* key>",
-      "bankId": "<your-alias>",
-      "autoRecall": true,
-      "autoRetain": true,
-      "recallBudget": "mid",
-      "retainEveryNTurns": 3
-    }]
-  ]
-}
-```
-
-Or use environment variables (reads from `~/.hindsight/token` if `HINDSIGHT_API_TOKEN` is set):
-
-```bash
-export HINDSIGHT_API_URL="https://<your-domain>"
-export HINDSIGHT_API_TOKEN=$(cat ~/.hindsight/token)
-export HINDSIGHT_BANK_ID=$(whoami)
-```
-
-The plugin auto-installs on startup — no `npm install` needed.
-
-**What it does:**
-- **Auto-recall** — on session start, queries your bank and injects relevant memories into the system prompt
-- **Auto-retain** — when the session goes idle, captures the conversation transcript to Hindsight
-- **Compaction hook** — retains memories before context window compaction so they survive trimming
-- **Explicit tools** — `hindsight_retain`, `hindsight_recall`, `hindsight_reflect` available for direct agent use
-
-**Key options:**
-
-| Option | Default | Description |
-|--------|---------|-------------|
-| `retainEveryNTurns` | `3` | Retain every N turns (higher = fewer API calls) |
-| `recallBudget` | `"mid"` | `low`/`mid`/`high` — controls recall depth vs latency |
-| `autoRecall` | `true` | Inject recalled memories on session start |
-| `autoRetain` | `true` | Auto-capture conversations |
-
-Persistent config can also live at `~/.hindsight/opencode.json` (applies across all projects).
-
-Full docs: https://hindsight.vectorize.io/sdks/integrations/opencode
-
-### Claude Code Plugin
-
-Install from the Hindsight marketplace:
-
-```bash
-claude plugin marketplace add vectorize-io/hindsight
-claude plugin install hindsight-memory
-```
-
-Configure at `~/.hindsight/claude-code.json`:
-
-```json
-{
-  "hindsightApiUrl": "https://<your-domain>",
-  "hindsightApiToken": "<your hsk_* key>",
-  "bankId": "<your-alias>",
-  "autoRecall": true,
-  "autoRetain": true,
-  "recallBudget": "mid",
-  "retainEveryNTurns": 10,
-  "enableKnowledgeTools": true
-}
-```
-
-Or via environment variables (same as OpenCode — reads `HINDSIGHT_API_URL`, `HINDSIGHT_API_TOKEN`, `HINDSIGHT_BANK_ID`).
-
-**What it does:**
-- **Auto-recall** — on every user prompt, queries Hindsight and injects memories as invisible `additionalContext`
-- **Auto-retain** — after every N turns, extracts and retains the conversation transcript
-- **Knowledge tools** — `agent_knowledge_*` MCP tools for explicit read/write/search of memory pages
-- **Subagent skill** — `/hindsight-memory:create-agent` scaffolds a subagent backed by an isolated memory bank
-
-**Key options:**
-
-| Option | Default | Description |
-|--------|---------|-------------|
-| `retainEveryNTurns` | `10` | Retain every N turns (higher than OpenCode's default of 3 because Claude Code includes a 2-turn overlap window per chunk, so each retain sends 12 turns of transcript) |
-| `recallBudget` | `"mid"` | `low`/`mid`/`high` |
-| `recallMaxTokens` | `1024` | Max tokens in recalled memory block |
-| `enableKnowledgeTools` | `false` | Expose `agent_knowledge_*` MCP tools |
-| `dynamicBankId` | `false` | Derive bank ID from agent+project context |
-| `resolveWorktrees` | `true` | All worktrees of same repo share one bank |
-
-Full docs: https://hindsight.vectorize.io/sdks/integrations/claude-code
-
-### MCP Servers vs Plugins
-
-| | MCP Servers | Plugins |
-|--|-------------|---------|
-| **Auth** | OAuth PKCE (JWT) | API key (`hsk_*`) |
-| **Auto-retain** | No — agent must call `retain` explicitly | Yes — captures conversations automatically |
-| **Auto-recall** | No — agent must call `recall` explicitly | Yes — injects on session/prompt start |
-| **Shared bank** | Yes (`hindsight-shared` server) | Not built-in (use MCP server for shared) |
-| **Setup** | `opencode mcp auth` / `claude mcp add` | Plugin config + env vars |
-
-**Recommended setup:** Use both. The plugin handles your personal bank automatically (auto-retain + auto-recall), while the MCP shared server gives the agent access to team knowledge via explicit `hindsight-shared_recall`.
+- `callbackPort` keeps the local OAuth callback on a port Cognito accepts. OpenCode 2.x otherwise
+  picks a random port, and Cognito rejects the login with `redirect_mismatch`.
+- If auth fails with `Issuer mismatch in authorization server metadata (RFC 8414 §3.3)`, see
+  [`docs/deployment.md`](docs/deployment.md#oauth-issuer-mismatch-in-authorization-server-metadata).
+- MCP tools are only called when the agent decides to, so they recall far less than the plugin's
+  automatic injection does.
 
 ## Bank Configuration
 
 Bank settings (missions, directives, mental models, entity labels) are version-controlled in `config/banks/` and applied idempotently via `config/apply.py`.
+
+> These definitions are for the optional personal (`<your-alias>`) and team (`shared`) banks, which
+> you reach over [MCP](#mcp-servers-optional). The per-repo `project-*` banks are created and
+> configured by the coding-agents plugin from its own bank manifest. `apply.py` doesn't manage them.
 
 ### First-Time Setup
 
@@ -334,46 +315,13 @@ Access it directly via the ALB (authenticates through Cognito/your IdP):
 https://cp.<your-domain>
 ```
 
-## How Memory Operations Work
-
-The MCP server exposes three core tools that the LLM invokes based on natural language context — no special keywords required:
-
-| Tool | Triggered when... | Example prompts |
-|------|-------------------|-----------------|
-| **retain** | User shares facts, preferences, decisions, or project details | "Remember that...", "We decided to use...", "My preference is..." |
-| **recall** | Agent needs context from previous sessions | "What do you know about...", "Have I mentioned...", start of conversation |
-| **reflect** | Reasoned analysis needed, not just fact retrieval | "What should I do about...", "Based on past decisions..." |
-
-The agent decides autonomously when to call each tool. You can also add rules to your `AGENTS.md` to guide behavior (e.g., "Always recall at the start of a conversation").
-
-### Targeting Personal vs Shared Banks
-
-OpenCode prefixes each MCP server's tools with the server name from your config. With the recommended naming:
-
-| You say... | Agent uses | Bank |
-|------------|-----------|------|
-| "Remember this for me" | `hindsight_retain` | personal (`/mcp/<your-alias>/`) |
-| "Store this as team knowledge" | `hindsight-shared_retain` | shared (`/mcp/shared/`) |
-| "What do I know about X?" | `hindsight_recall` | personal |
-| "What does the team know about X?" | `hindsight-shared_recall` | shared |
-
-### Verifying the Connection
-
-After running `opencode mcp auth`, start a session and try:
-
-- **Retain**: "Remember that hindsight was deployed on May 5th"
-- **Recall**: "What do you know about the hindsight deployment?"
-- **Reflect**: "Based on what you know, what should I focus on next?"
-
-If auth has expired, you'll see a "Token expired" error — re-run `opencode mcp auth hindsight` and restart the session.
-
 ## Structure
 
 ```
 .
 ├── config/
 │   ├── hindsight-auth.sh   # PKCE auth script (fetches API key)
-│   ├── hindsight-auth.py   # Auth implementation (stdlib only)
+│   ├── hindsight-auth.py   # Auth implementation (stdlib only; also updates coding-agent.json)
 │   ├── apply.py            # Bank configuration script
 │   ├── setup-venv.sh       # Virtual env setup for apply.py
 │   ├── requirements.txt    # Python deps (hindsight-client>=0.7.2 from PyPI)
@@ -394,7 +342,7 @@ If auth has expired, you'll see a "Token expired" error — re-run `opencode mcp
 │       ├── api-keys.tf     # Secrets Manager, rotation Lambda, EKS access
 │       ├── api-keys-gateway.tf  # API Gateway for key retrieval
 │       ├── litellm-proxy.tf # LiteLLM proxy (Bedrock auth via IRSA)
-│       ├── outputs.tf      # API URL, OpenCode MCP config
+│       ├── outputs.tf      # API URL, coding-agent.json template, OpenCode MCP config
 │       ├── variables.tf
 │       ├── extensions/
 │       │   └── hindsight_cognito_auth/  # Custom Python auth extension
@@ -421,6 +369,7 @@ terraform destroy
 
 - [Hindsight upstream](https://github.com/vectorize-io/hindsight) — source code, Helm chart, docs
 - [Hindsight documentation](https://hindsight.vectorize.io)
+- [hindsight-coding-agents plugin](https://github.com/vectorize-io/hindsight/tree/main/hindsight-integrations/coding-agents)
 - [Hindsight MCP server docs](https://hindsight.vectorize.io/developer/mcp-server)
 - [OpenCode MCP server docs](https://opencode.ai/docs/mcp-servers/)
 - [Model Context Protocol](https://modelcontextprotocol.io)

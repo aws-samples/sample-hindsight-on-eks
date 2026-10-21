@@ -29,7 +29,8 @@ terraform init
 terraform validate
 terraform plan -out=tfplan
 terraform apply tfplan
-terraform output opencode_mcp_config   # MCP config snippet for opencode.json
+terraform output coding_agent_config   # ~/.hindsight/coding-agent.json template (coding-agents plugin)
+terraform output opencode_mcp_config   # optional MCP config snippet for opencode.json
 ```
 
 Kubernetes access:

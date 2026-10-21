@@ -41,8 +41,21 @@ output "port_forward_commands" {
   ])
 }
 
+output "coding_agent_config" {
+  description = "Template ~/.hindsight/coding-agent.json for the @vectorize-io/hindsight-coding-agents plugin. Save it with mode 0600, then run config/hindsight-auth.sh to fill in apiToken."
+  # The project- prefix matches the shared-bank naming rule in the auth extension
+  # (tenant.py::_check_bank_access). dynamicBankId resolves one bank per git repo.
+  value = jsonencode({
+    serverMode     = "self-hosted"
+    apiUrl         = local.hindsight_public_url
+    apiToken       = "<written by config/hindsight-auth.sh>"
+    bankIdTemplate = "project-{gitProject}"
+    dynamicBankId  = true
+  })
+}
+
 output "opencode_mcp_config" {
-  description = "Template OpenCode MCP server configuration. Replace <your-alias> with your Cognito username before pasting into opencode.json."
+  description = "Optional: template OpenCode MCP server configuration for reaching a specific bank over MCP. Replace <your-alias> with your Cognito username before pasting into opencode.json."
   # callbackPort pins the local OAuth callback to a port in the MCP client's Cognito
   # callback URLs (see auth.tf). OpenCode 2.x otherwise picks a random port, which
   # Cognito rejects with redirect_mismatch.
