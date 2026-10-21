@@ -177,25 +177,32 @@ Expected: `{"status":"ok"}` or similar.
 
 You can also browse the Control Plane dashboard at `http://localhost:3000` (Control Plane port-forward must be running).
 
-## Step 9: Connect MCP clients
+## Step 9: Connect coding agents
 
-Get the OpenCode MCP config snippet (it emits `localhost` URLs in internal mode):
+Write the coding-agents plugin config from the Terraform template (it emits a `localhost` URL in internal mode), then fill in your API key:
 
 ```bash
 cd infra/hindsight
-terraform output opencode_mcp_config
+mkdir -p ~/.hindsight
+terraform output -raw coding_agent_config | python3 -m json.tool > ~/.hindsight/coding-agent.json
+chmod 600 ~/.hindsight/coding-agent.json
+cd ../..
+./config/hindsight-auth.sh   # writes apiToken into the file
 ```
 
-Add the output to your `~/.config/opencode/opencode.json` (or a project-level `opencode.json`), then authenticate each MCP server:
+Install the plugin for your agent(s), then restart them:
 
 ```bash
-opencode mcp auth hindsight
-opencode mcp auth hindsight-shared
+npx @vectorize-io/hindsight-coding-agents install opencode2 --server self-hosted   # or opencode, claude-code, all
 ```
 
-For Claude Code, add the servers with the localhost URLs from the output and run `/mcp` inside a session to authenticate.
+On OpenCode 2.x, move the entry the installer adds under `plugin` into your `plugins` list (see the [README](../README.md#install)). In a session inside a git repo, `hindsight_diagnose` should report `bank_id: project-<repo>`.
 
-## Step 10: Initialize bank configurations
+**Optional: MCP.** To reach a specific bank (such as a personal or shared bank) over MCP, add the output of `terraform output opencode_mcp_config` to your OpenCode config and authenticate each server with `opencode mcp auth <server>`. For Claude Code, add the servers with the URLs from the output and run `/mcp` inside a session. See [MCP Servers (Optional)](../README.md#mcp-servers-optional).
+
+## Step 10: Initialize bank configurations (optional)
+
+These are the optional personal and shared banks you reach over MCP. The coding-agents plugin creates and configures its own `project-*` banks.
 
 ```bash
 cd config
@@ -230,7 +237,7 @@ Setting `public_endpoint = true` provisions:
 - The **Control Plane behind Cognito OIDC** at `cp.<hindsight_domain>`.
 - The **API custom domain** at your `hindsight_domain`, with the auth endpoint at `auth.<hindsight_domain>`.
 
-In public mode the `hindsight_api_url`, `control_plane_url`, and `opencode_mcp_config` outputs report the public HTTPS URLs instead of localhost, and `kubectl port-forward` is no longer required for normal use.
+In public mode the `hindsight_api_url`, `control_plane_url`, `coding_agent_config`, and `opencode_mcp_config` outputs report the public HTTPS URLs instead of localhost, and `kubectl port-forward` is no longer required for normal use.
 
 ## Bring your own Cognito pool / IdP (optional)
 

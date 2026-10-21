@@ -4,7 +4,8 @@
 Opens a browser for Cognito authentication (federated to your IdP if configured),
 receives the authorization code, exchanges it for an access token, then fetches
 the user's API key from the key-retrieval endpoint. Caches the key to
-~/.hindsight/token.
+~/.hindsight/token, and into ~/.hindsight/coding-agent.json when that file
+exists (the hindsight-coding-agents plugin config).
 
 Required environment variables:
     HINDSIGHT_COGNITO_DOMAIN     - e.g. mypool.auth.us-west-2.amazoncognito.com
@@ -36,6 +37,7 @@ CLIENT_ID = os.environ.get("HINDSIGHT_COGNITO_CLIENT_ID", "")
 CALLBACK_PORT_RAW = os.environ.get("HINDSIGHT_AUTH_CALLBACK_PORT", "19876")
 KEY_ENDPOINT = os.environ.get("HINDSIGHT_KEY_ENDPOINT", "")
 TOKEN_FILE = os.path.expanduser("~/.hindsight/token")
+CODING_AGENT_CONFIG = os.path.expanduser("~/.hindsight/coding-agent.json")
 SCOPES = "openid email profile"
 
 # Populated by _check_required_env() once CALLBACK_PORT_RAW is validated.
@@ -140,6 +142,33 @@ def main():
     print(f"API key cached to {TOKEN_FILE}")
     print(f"  Valid until next rotation (~24 hours)")
     print(f"  Restart your shell or run: export HINDSIGHT_API_TOKEN=$(cat {TOKEN_FILE})")
+
+    _update_coding_agent_config(api_key)
+
+
+def _update_coding_agent_config(api_key):
+    """Write the key into the hindsight-coding-agents plugin config, if present.
+
+    The plugin re-reads apiToken from this file after a 401, so a long-running
+    OpenCode service picks up the rotated key without a restart. An environment
+    variable cannot do that: the service keeps the value it was started with.
+    """
+    if not os.path.exists(CODING_AGENT_CONFIG):
+        return
+    try:
+        with open(CODING_AGENT_CONFIG) as f:
+            cfg = json.load(f)
+    except (OSError, ValueError) as e:
+        print(f"  Skipped {CODING_AGENT_CONFIG}: {e}", file=sys.stderr)
+        return
+    cfg["apiToken"] = api_key
+    tmp = f"{CODING_AGENT_CONFIG}.tmp"
+    with open(tmp, "w") as f:
+        json.dump(cfg, f, indent=2)
+        f.write("\n")
+    os.chmod(tmp, 0o600)
+    os.replace(tmp, CODING_AGENT_CONFIG)
+    print(f"  Updated apiToken in {CODING_AGENT_CONFIG}")
 
 
 def _start_callback_server(expected_state, result):
